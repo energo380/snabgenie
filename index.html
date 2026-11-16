@@ -123,6 +123,17 @@ body {
 
 .login-box input::placeholder { color: #888; }
 
+.pass-field { position: relative; margin-bottom: 20px; }
+.login-box .pass-field input { margin-bottom: 0; padding-right: 96px; }
+.login-box .pass-eye,
+.login-box .pass-eye:hover {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: auto; padding: 8px 10px; border: 0; border-radius: 8px;
+    background: none; box-shadow: none;
+    font-size: 13px; font-weight: normal; color: #aaa;
+}
+.login-box .pass-eye:hover { color: #fff; }
+
 .login-box button {
     width: 100%;
     padding: 15px;
@@ -964,7 +975,10 @@ body {
     <div class="login-box">
         <h1>📦 Заявки на материалы</h1>
         <h2>Создание заявок</h2>
-        <input type="password" id="passwordInput" placeholder="Введите пароль" autocomplete="off">
+        <div class="pass-field">
+            <input type="password" id="passwordInput" placeholder="Введите пароль" autocomplete="off">
+            <button type="button" class="pass-eye" id="passEye" aria-pressed="false" aria-controls="passwordInput">Показать</button>
+        </div>
         <button onclick="handleLogin()">Войти</button>
         <div class="error-message" id="loginError"></div>
     </div>
@@ -1909,6 +1923,7 @@ function handleLogout() {
     document.getElementById('mainScreen').style.display = 'none';
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('passwordInput').value = '';
+    setPassVisible(false);
     document.getElementById('loginError').textContent = '';
     showToast('Вы вышли из системы', 'success');
 }
@@ -4574,6 +4589,18 @@ function generatePrintContent(data) {
 
 document.getElementById('passwordInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') handleLogin();
+});
+
+/* Показать / скрыть пароль на форме входа — как на сайте АВР */
+function setPassVisible(show) {
+    var i = document.getElementById('passwordInput'), b = document.getElementById('passEye');
+    i.type = show ? 'text' : 'password';
+    b.textContent = show ? 'Скрыть' : 'Показать';
+    b.setAttribute('aria-pressed', String(show));
+}
+document.getElementById('passEye').addEventListener('click', function () {
+    setPassVisible(document.getElementById('passwordInput').type === 'password');
+    document.getElementById('passwordInput').focus();
 });
 
 document.querySelectorAll('.date-field').forEach(initDateField);
