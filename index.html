@@ -124,15 +124,17 @@ body {
 .login-box input::placeholder { color: #888; }
 
 .pass-field { position: relative; margin-bottom: 20px; }
-.login-box .pass-field input { margin-bottom: 0; padding-right: 96px; }
+.login-box .pass-field input { margin-bottom: 0; padding-right: 52px; }
 .login-box .pass-eye,
 .login-box .pass-eye:hover {
     position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-    width: auto; padding: 8px 10px; border: 0; border-radius: 8px;
-    background: none; box-shadow: none;
-    font-size: 13px; font-weight: normal; color: #aaa;
+    width: auto; padding: 8px; border: 0; border-radius: 8px;
+    background: none; box-shadow: none; color: #aaa;
 }
 .login-box .pass-eye:hover { color: #fff; }
+.pass-eye svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pass-eye .i-hide, .pass-eye[aria-pressed="true"] .i-show { display: none; }
+.pass-eye[aria-pressed="true"] .i-hide { display: block; }
 
 .login-box button {
     width: 100%;
@@ -977,7 +979,7 @@ body {
         <h2>Создание заявок</h2>
         <div class="pass-field">
             <input type="password" id="passwordInput" placeholder="Введите пароль" autocomplete="off">
-            <button type="button" class="pass-eye" id="passEye" aria-pressed="false" aria-controls="passwordInput">Показать</button>
+            <button type="button" class="pass-eye" id="passEye" aria-pressed="false" aria-controls="passwordInput" aria-label="Показать пароль" title="Показать пароль"><svg class="i-show" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><svg class="i-hide" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-2.4 3.3M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg></button>
         </div>
         <button onclick="handleLogin()">Войти</button>
         <div class="error-message" id="loginError"></div>
@@ -4595,7 +4597,8 @@ document.getElementById('passwordInput').addEventListener('keypress', function(e
 function setPassVisible(show) {
     var i = document.getElementById('passwordInput'), b = document.getElementById('passEye');
     i.type = show ? 'text' : 'password';
-    b.textContent = show ? 'Скрыть' : 'Показать';
+    b.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+    b.title = b.getAttribute('aria-label');
     b.setAttribute('aria-pressed', String(show));
 }
 document.getElementById('passEye').addEventListener('click', function () {
