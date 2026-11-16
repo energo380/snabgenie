@@ -1,0 +1,4627 @@
+<!-- ============================================================
+     INDEX.HTML - версия 4.4
+     Нужен скрипт сервера v4.1 (действие setDelivered)
+     Изменения относительно 4.3:
+       1. Сколько привезено по позиции - колонка "Привезено" в открытой
+          заявке. Вводится общее количество, до сотых. Статус: ничего -
+          красный, часть - жёлтый "3/5" и "не хватает 2", всё - зелёный,
+          больше заказанного - зелёный и "больше на 1"
+       2. Кнопка статуса - "привезли всё". Увеличить количество может
+          любой, уменьшить и снять отметку - только администратор
+       3. В шапке заявки строка "Выполнение: 3 из 5, частично 1".
+          В истории заявка жёлтая, если хоть что-то привезено
+       4. Печать заявки - колонка "Привезено" и строка "Выполнение".
+          Журнал - отметка "◐ 3 из 5", а в "Только невыполненном" у
+          частично привезённых - "привезено 3 из 5, не хватает 2"
+       5. Поле "Привезено": стрелки меняют число на 1, а не на 0,01.
+          Сохраняется при уходе из поля или по Enter - не на каждое
+          нажатие стрелки
+     Изменения 4.3 относительно 4.2:
+       1. Поля дат (фильтр истории, период журнала) всегда в виде
+          дд.мм.гггг: встроенное поле браузера подписывалось
+          по настройкам компьютера ("dd-mm-jjjj"). Точки ставятся
+          при наборе, календарь - по кнопке 📅
+     Изменения 4.2 относительно 4.1:
+       1. Кнопка "Печать" на главной заменена на "Печать журнала":
+          период, подразделение и вид журнала - только невыполненные
+          позиции или полный журнал с отметками выполнения. Журнал -
+          одна таблица, заявка с реквизитами и под ней её позиции
+     Изменения 4.1 относительно 4.0:
+       1. Печать заявки с фотоматериалами - кнопка "Печать с фото"
+          в открытой заявке. После заявки, с нового листа, идут фото
+          по позициям, по 4 на лист, со сквозной нумерацией; в таблице
+          заявки колонка "Фото" ссылается на их номера. Печать
+          начинается, когда фото загрузились с Google Диска
+     Изменения 4.0 относительно 3.0:
+       1. Вложения (фото и PDF) к КАЖДОЙ позиции заявки - скрепка
+          в таблице позиций: и в форме создания, и в открытой заявке
+       2. Фото сжимается на устройстве: 1600 px по большей стороне,
+          JPEG 0.7. PDF не трогаем
+       3. Содержимое файлов лежит в IndexedDB, описание отправок -
+          в localStorage. В base64 файл переводится один раз, перед отправкой
+       4. Единая очередь: заявки и файлы, строго по одному, с метками
+          clientId. Повтор не создаёт ни второй заявки, ни второго файла
+       5. Файл, приложенный при создании, дожидается номера заявки
+          и уходит следом автоматически
+       6. Повторы 20 / 60 / 150 секунд, дальше - вручную
+       7. Отказ сервера по существу отличается от обрыва связи:
+          введённое возвращается в форму, а не теряется
+       8. Черновик заявки пишется по каждому изменению и восстанавливается
+       9. Неотправленное видно прямо в списке вложений позиции
+     Оформление и палитра не изменены.
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Заявки на материалы</title>
+    <style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh;
+    color: #ffffff;
+}
+
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.login-box {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 40px;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.login-box h1 {
+    text-align: center;
+    margin-bottom: 10px;
+    font-size: 24px;
+    background: linear-gradient(90deg, #00d4ff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.login-box h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 14px;
+    color: #aaa;
+    font-weight: normal;
+}
+
+.login-box input {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+.login-box input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.login-box input::placeholder { color: #888; }
+
+.login-box button {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #00d4ff, #00ff88);
+    color: #1a1a2e;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.login-box button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+}
+
+.error-message {
+    color: #ff6b6b;
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+.main-container {
+    display: none;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.header h1 {
+    font-size: 24px;
+    background: linear-gradient(90deg, #00d4ff, #00ff88);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.user-info span { color: #aaa; font-size: 14px; }
+
+.user-info .department {
+    background: rgba(0, 212, 255, 0.2);
+    padding: 5px 15px;
+    border-radius: 20px;
+    color: #00d4ff;
+    font-weight: bold;
+}
+
+.header-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, #00d4ff, #00ff88);
+    color: #1a1a2e;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover { background: rgba(255, 255, 255, 0.2); }
+
+.btn-danger {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.btn-danger:hover { background: rgba(255, 107, 107, 0.3); }
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.order-form {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    padding: 30px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.form-header {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.form-group { display: flex; flex-direction: column; gap: 8px; }
+
+.form-group label {
+    color: #aaa;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.form-group input,
+.form-group select {
+    padding: 12px 15px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.2);
+}
+
+.form-group select option { background: #1a1a2e; color: #fff; }
+
+.form-group input:disabled,
+.form-group select:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.positions-section h3 { margin-bottom: 15px; color: #00d4ff; font-size: 16px; }
+
+.positions-table-container {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.positions-table { width: 100%; border-collapse: collapse; min-width: 880px; }
+
+.positions-table th {
+    background: rgba(0, 212, 255, 0.1);
+    padding: 12px 10px;
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #00d4ff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.positions-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.positions-table tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+.positions-table input,
+.positions-table select {
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 13px;
+}
+
+.positions-table input:focus,
+.positions-table select:focus { outline: none; background: rgba(255, 255, 255, 0.15); }
+
+.positions-table select option { background: #1a1a2e; color: #fff; }
+
+.positions-table .col-num { width: 50px; text-align: center; }
+.positions-table .col-name { min-width: 200px; }
+.positions-table .col-unit { width: 100px; }
+.positions-table .col-qty { width: 80px; }
+.positions-table .col-article { width: 120px; }
+.positions-table .col-note { min-width: 150px; }
+.positions-table .col-status { width: 70px; text-align: center; }
+.positions-table .col-files { width: 70px; text-align: center; }
+.positions-table .col-action { width: 50px; text-align: center; }
+
+.status-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.status-btn.not-completed {
+    background: rgba(255, 107, 107, 0.3);
+    color: #ff6b6b;
+    box-shadow: 0 0 10px rgba(255, 107, 107, 0.3);
+}
+
+.status-btn.completed {
+    background: rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+    box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.status-btn:hover { transform: scale(1.1); }
+.status-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.delete-row-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 18px;
+}
+
+.delete-row-btn:hover { background: rgba(255, 107, 107, 0.4); transform: scale(1.1); }
+
+.form-actions { display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
+
+.add-row-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px dashed rgba(0, 212, 255, 0.3);
+    border-radius: 10px;
+    color: #00d4ff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.add-row-btn:hover { background: rgba(0, 212, 255, 0.2); border-style: solid; }
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    background: rgba(0, 212, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h2 { color: #00d4ff; font-size: 18px; }
+
+.modal-close {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    cursor: pointer;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.modal-close:hover { background: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
+
+.modal-body { padding: 30px; overflow-y: auto; max-height: calc(90vh - 140px); }
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 20px 30px;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.history-filters { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+.history-filters .form-group { min-width: 150px; }
+
+.history-table { width: 100%; border-collapse: collapse; }
+
+.history-table th {
+    background: rgba(0, 212, 255, 0.1);
+    padding: 12px 15px;
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #00d4ff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 14px;
+}
+
+.history-table tr:hover { background: rgba(255, 255, 255, 0.05); }
+.history-table tr { cursor: pointer; transition: all 0.2s ease; }
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.status-badge.completed { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+.status-badge.partial { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.status-badge.pending { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+
+.order-details-header {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.detail-item { display: flex; flex-direction: column; gap: 5px; }
+.detail-item label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.detail-item span { color: #fff; font-size: 14px; font-weight: 500; }
+
+.loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+}
+
+.loading-overlay.active { display: flex; }
+
+.spinner {
+    width: 50px; height: 50px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #00d4ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.toast {
+    position: fixed;
+    bottom: 30px; right: 30px;
+    padding: 15px 25px;
+    border-radius: 10px;
+    color: white;
+    font-weight: 500;
+    z-index: 3000;
+    transform: translateX(150%);
+    transition: transform 0.3s ease;
+    max-width: 350px;
+}
+
+.toast.active { transform: translateX(0); }
+.toast.success { background: linear-gradient(135deg, #00ff88, #00d4ff); color: #1a1a2e; }
+.toast.error { background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: #1a1a2e; }
+.toast.warning { background: linear-gradient(135deg, #ffc107, #ffdb4d); color: #1a1a2e; }
+
+@media (max-width: 768px) {
+    .header { flex-direction: column; align-items: flex-start; }
+    .header-buttons { width: 100%; }
+    .header-buttons .btn { flex: 1; justify-content: center; }
+    .form-header { grid-template-columns: 1fr; }
+    .modal { margin: 10px; max-height: 95vh; }
+    .modal-body { padding: 15px; }
+    .history-filters { flex-direction: column; }
+    .history-filters .form-group { width: 100%; }
+}
+
+@media print {
+    body { background: white !important; color: black !important; }
+    .login-container, .header, .form-actions, .modal-overlay, .btn,
+    .delete-row-btn, .add-row-btn, .loading-overlay, .toast,
+    .queue-indicator, .send-progress, .col-files, .file-btn { display: none !important; }
+    .main-container { display: block !important; padding: 0; max-width: none; }
+    .order-form { background: white; border: none; padding: 0; }
+}
+
+/* ============================================================
+   БУФЕР ОЧЕРЕДИ ОТПРАВКИ (индикатор + модалка)
+   ============================================================ */
+.queue-indicator {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    z-index: 900;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 30px;
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    user-select: none;
+}
+
+.queue-indicator.visible { display: inline-flex; }
+.queue-indicator:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 212, 255, 0.25); }
+
+.queue-indicator .qi-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #00d4ff;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+    flex-shrink: 0;
+}
+.queue-indicator.state-sending .qi-dot { background: #00d4ff; animation: qiPulse 1s ease-in-out infinite; }
+.queue-indicator.state-pending .qi-dot { background: #ffc107; box-shadow: 0 0 8px rgba(255, 193, 7, 0.6); }
+.queue-indicator.state-error   .qi-dot { background: #ff6b6b; box-shadow: 0 0 8px rgba(255, 107, 107, 0.6); }
+.queue-indicator.state-sent    .qi-dot { background: #00ff88; box-shadow: 0 0 8px rgba(0, 255, 136, 0.6); }
+
+@keyframes qiPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+.queue-indicator .qi-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: rgba(0, 212, 255, 0.2);
+    color: #00d4ff;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.queue-list { display: flex; flex-direction: column; gap: 12px; }
+
+.queue-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.queue-item.kind-file { border-left: 3px solid rgba(0, 212, 255, 0.5); }
+
+.queue-item .qitem-main { flex-grow: 1; min-width: 0; }
+.queue-item .qitem-title { color: #fff; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.queue-item .qitem-sub { color: #888; font-size: 12px; margin-bottom: 4px; word-break: break-word; }
+.queue-item .qitem-err { color: #ff6b6b; font-size: 12px; word-break: break-word; margin-bottom: 4px; }
+
+.queue-item .qitem-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.queue-item .qitem-actions .btn { padding: 8px 14px; font-size: 12px; }
+
+.queue-item .qitem-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.queue-item .qitem-status.pending { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+.queue-item .qitem-status.sending { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
+.queue-item .qitem-status.error   { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+.queue-item .qitem-status.sent    { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+
+.queue-empty { text-align: center; padding: 40px; color: #888; }
+.queue-hint { color: #ffc107; font-size: 13px; margin-bottom: 15px; text-align: center; }
+
+/* Бегущая полоса отправки */
+.send-progress {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    z-index: 3500;
+    display: none;
+}
+.send-progress.active { display: block; }
+.send-progress::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    width: 35%;
+    background: linear-gradient(90deg, rgba(0,212,255,0) 0%, #00d4ff 40%, #00ff88 60%, rgba(0,255,136,0) 100%);
+    animation: sendRun 1.3s linear infinite;
+}
+@keyframes sendRun {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(400%); }
+}
+
+/* Отметка "просмотрено" */
+.status-btn.viewed {
+    background: rgba(0, 212, 255, 0.3);
+    color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+.status-btn.not-viewed {
+    background: rgba(255, 255, 255, 0.08);
+    color: #888;
+}
+.history-table .col-viewed { width: 80px; text-align: center; }
+.history-table .col-viewed .status-btn { margin: 0 auto; }
+
+/* Привезено по позиции */
+.status-btn.partial {
+    background: rgba(255, 193, 7, 0.3);
+    color: #ffc107;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.3);
+    font-size: 11px;
+    font-weight: bold;
+}
+.positions-table.with-got { min-width: 1010px; }
+.positions-table .col-got { width: 130px; }
+.got { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #aaa; font-size: 13px; }
+.positions-table .got input { width: 64px; padding: 6px; text-align: center; }
+.got.full input { box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.5); }
+.got.part input { box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.6); }
+.got input:disabled { opacity: 0.6; cursor: not-allowed; }
+.got-hint { font-size: 11px; margin-top: 3px; }
+.got-hint.part { color: #ffc107; }
+.got-hint.over { color: #00ff88; }
+
+/* Кнопка "Загрузить ещё" */
+.load-more-wrap { text-align: center; margin-top: 20px; }
+.history-counter { text-align: center; color: #888; font-size: 12px; margin-top: 12px; }
+
+/* Чекбокс приватной заявки администратора */
+.private-toggle {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #aaa;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+.private-toggle.visible { display: flex; }
+.private-toggle input { width: 18px; height: 18px; cursor: pointer; accent-color: #00d4ff; }
+
+/* Печать журнала */
+.journal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+.journal-grid .journal-wide { grid-column: 1 / -1; }
+.journal-modes { display: flex; flex-direction: column; gap: 10px; }
+.journal-mode {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 15px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.journal-mode:hover { background: rgba(255, 255, 255, 0.1); }
+.journal-mode:has(input:checked) { border-color: rgba(0, 212, 255, 0.5); background: rgba(0, 212, 255, 0.1); }
+.journal-mode input { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; cursor: pointer; accent-color: #00d4ff; }
+.journal-mode strong { display: block; color: #fff; font-size: 14px; margin-bottom: 3px; }
+.journal-mode small { display: block; color: #aaa; font-size: 12px; }
+.journal-hint { color: #888; font-size: 12px; margin-top: 15px; text-align: center; }
+
+/* Поле даты: видимый текст всегда "дд.мм.гггг", а не формат из настроек
+   компьютера. Встроенное поле браузера скрыто - оно хранит значение и
+   открывает календарь по кнопке */
+.date-field { position: relative; display: flex; }
+.form-group .date-field .date-text { width: 100%; padding-right: 44px; }
+.form-group .date-field .date-text.invalid { box-shadow: 0 0 0 1px #ff6b6b; }
+.date-field .date-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #aaa;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+.date-field .date-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.form-group .date-field .date-native {
+    position: absolute;
+    right: 5px;
+    bottom: 0;
+    width: 34px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+/* На телефонах календарь открывается касанием самого встроенного поля,
+   положенного поверх кнопки: iPhone не открывает его через showPicker() */
+@media (pointer: coarse) {
+    .form-group .date-field .date-native {
+        top: 50%;
+        bottom: auto;
+        transform: translateY(-50%);
+        height: 34px;
+        min-width: 0;
+        max-width: 34px;
+        -webkit-appearance: none;
+        appearance: none;
+        pointer-events: auto;
+        z-index: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .journal-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   ВЛОЖЕНИЯ
+   ============================================================ */
+.file-btn {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #888;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    margin: 0 auto;
+}
+.file-btn:hover { background: rgba(0, 212, 255, 0.25); color: #00d4ff; transform: scale(1.1); }
+.file-btn.has-files { background: rgba(0, 255, 136, 0.2); color: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.25); }
+.file-btn.pending   { background: rgba(255, 193, 7, 0.2); color: #ffc107; box-shadow: 0 0 10px rgba(255, 193, 7, 0.25); }
+
+.file-btn .file-count {
+    position: absolute;
+    top: -5px; right: -5px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #00ff88;
+    color: #1a1a2e;
+    font-size: 10px;
+    font-weight: bold;
+    line-height: 17px;
+    text-align: center;
+}
+.file-btn.pending .file-count { background: #ffc107; }
+
+#filesModal { z-index: 1100; }
+
+.files-subtitle { color: #aaa; font-size: 14px; margin-bottom: 18px; word-break: break-word; }
+.files-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 15px; }
+
+.file-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.file-card.local { border-color: rgba(255, 193, 7, 0.35); }
+
+.file-thumb-wrap {
+    width: 100%;
+    height: 150px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.file-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.file-thumb-icon {
+    font-size: 44px;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.file-name { color: #fff; font-size: 13px; font-weight: 600; word-break: break-word; }
+.file-meta { color: #888; font-size: 11px; }
+.file-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.file-actions .btn { padding: 7px 12px; font-size: 12px; flex: 1; justify-content: center; }
+.files-empty { text-align: center; padding: 40px; color: #888; }
+.files-hint { color: #888; font-size: 12px; margin-top: 18px; text-align: center; }
+.files-webview-hint {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(255, 193, 7, 0.12);
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    color: #ffdb4d;
+    font-size: 12px;
+    text-align: center;
+}
+
+/* Поля выбора файла: невидимы, но не display:none - иначе часть
+   встроенных браузеров (мессенджеры) не открывает выбор файла */
+.files-footer { position: relative; }
+.file-input-hidden {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+.file-pick { -webkit-tap-highlight-color: transparent; user-select: none; }
+.file-pick.is-disabled { opacity: 0.5; pointer-events: none; cursor: not-allowed; }
+
+/* Компьютер: одна кнопка «Добавить файл» */
+.pick-mobile { display: none; }
+.pick-label-mobile { display: none; }
+
+/* Телефон и планшет: «Камера» и «Галерея» крупно, «Файл / PDF» - рядом */
+@media (pointer: coarse) {
+    .pick-mobile { display: inline-flex; }
+    .pick-label-desktop { display: none; }
+    .pick-label-mobile { display: inline; }
+    .files-footer .pick-any {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .files-footer .btn { flex: 1 1 40%; justify-content: center; padding: 14px 12px; font-size: 15px; }
+}
+
+@media (max-width: 768px) {
+    .queue-indicator { bottom: 20px; left: 20px; }
+    .queue-item { flex-direction: column; }
+    .queue-item .qitem-actions { flex-direction: row; }
+    .files-grid { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .send-progress::before { animation: none; width: 100%; opacity: 0.5; }
+    .queue-indicator.state-sending .qi-dot { animation: none; }
+}
+    </style>
+<style id="svc-style">
+/* кнопка «Сервисы» — возврат в общее меню */
+#loginScreen { flex-direction: column; gap: 22px; }
+</style>
+</head>
+<body>
+
+<div class="send-progress" id="sendProgress"></div>
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="login-container" id="loginScreen">
+    <div class="login-box">
+        <h1>📦 Заявки на материалы</h1>
+        <h2>Создание заявок</h2>
+        <input type="password" id="passwordInput" placeholder="Введите пароль" autocomplete="off">
+        <button onclick="handleLogin()">Войти</button>
+        <div class="error-message" id="loginError"></div>
+    </div>
+    <button type="button" class="btn btn-secondary" onclick="location.href='https://energo380.github.io/menu/'" title="Вернуться в меню рабочих сервисов">🏠 Сервисы</button>
+</div>
+
+<div class="main-container" id="mainScreen">
+    <div class="header">
+        <h1>📦 Заявки на материалы</h1>
+        <div class="user-info">
+            <span>Подразделение:</span>
+            <span class="department" id="userDepartment">-</span>
+        </div>
+        <div class="header-buttons">
+            <button class="btn btn-secondary" onclick="openHistory()">📋 История</button>
+            <button class="btn btn-secondary" onclick="openJournalModal()">🖨️ Печать журнала</button>
+            <button type="button" class="btn btn-secondary" onclick="location.href='https://energo380.github.io/menu/'" title="Вернуться в меню рабочих сервисов">🏠 Сервисы</button>
+            <button class="btn btn-danger" onclick="handleLogout()">🚪 Выход</button>
+        </div>
+    </div>
+
+    <div class="order-form" id="orderForm">
+        <div class="form-header">
+            <div class="form-group">
+                <label>№ заявки</label>
+                <input type="text" id="orderNumber" disabled placeholder="Автоматически">
+            </div>
+            <div class="form-group">
+                <label>Дата</label>
+                <input type="text" id="orderDate" disabled>
+            </div>
+            <div class="form-group">
+                <label>Подразделение</label>
+                <select id="orderDepartment" disabled><option value="">-</option></select>
+            </div>
+            <div class="form-group">
+                <label>Объект (до 20 символов)</label>
+                <input type="text" id="orderObject" maxlength="20" placeholder="Введите объект">
+            </div>
+            <div class="form-group">
+                <label>Категория</label>
+                <select id="orderCategory"><option value="">Выберите...</option></select>
+            </div>
+            <div class="form-group">
+                <label>Создал заявку</label>
+                <select id="orderCreatedBy"><option value="">Выберите...</option></select>
+            </div>
+            <div class="form-group" id="privateGroup" style="display:none;">
+                <label>Видимость</label>
+                <label class="private-toggle visible" id="privateToggle">
+                    <input type="checkbox" id="orderPrivate">
+                    <span>Только для меня</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="positions-section">
+            <h3>Позиции заявки (максимум 15)</h3>
+            <div class="positions-table-container">
+                <table class="positions-table" id="positionsTable">
+                    <thead>
+                        <tr>
+                            <th class="col-num">№</th>
+                            <th class="col-name">Наименование материала</th>
+                            <th class="col-unit">Ед. изм.</th>
+                            <th class="col-qty">Кол-во</th>
+                            <th class="col-article">Артикул/Код</th>
+                            <th class="col-note">Примечание</th>
+                            <th class="col-files">Файл</th>
+                            <th class="col-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="add-row-btn" onclick="addPositionRow()">
+                <span>➕</span> Добавить позицию
+            </button>
+            <div style="flex-grow: 1;"></div>
+            <button class="btn btn-secondary" onclick="clearForm()">🗑️ Очистить</button>
+            <button class="btn btn-primary" id="saveOrderBtn" onclick="saveOrder()">💾 Сохранить заявку</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="historyModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>📋 История заявок</h2>
+            <button class="modal-close" onclick="closeHistory()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="history-filters">
+                <div class="form-group">
+                    <label>Подразделение</label>
+                    <select id="filterDepartment" onchange="loadHistory(false)">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Дата</label>
+                    <div class="date-field">
+                        <input type="text" class="date-text" placeholder="дд.мм.гггг" inputmode="numeric" maxlength="10" autocomplete="off">
+                        <button type="button" class="date-btn" title="Выбрать в календаре" tabindex="-1">📅</button>
+                        <input type="date" class="date-native" tabindex="-1" aria-hidden="true" id="filterDate" onchange="loadHistory(false)">
+                    </div>
+                </div>
+                <div class="form-group" style="align-self: flex-end;">
+                    <button class="btn btn-secondary" onclick="clearFilters()">Сбросить</button>
+                </div>
+            </div>
+
+            <div class="positions-table-container">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>№ заявки</th>
+                            <th>Дата</th>
+                            <th>Подразделение</th>
+                            <th>Объект</th>
+                            <th>Категория</th>
+                            <th>Создал</th>
+                            <th>Статус</th>
+                            <th class="col-viewed">Просм.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+
+            <div id="historyEmpty" style="text-align: center; padding: 40px; color: #888; display: none;">
+                Заявки не найдены
+            </div>
+
+            <div class="load-more-wrap" id="loadMoreWrap" style="display:none;">
+                <button class="btn btn-secondary" onclick="loadHistory(true)">⬇️ Загрузить ещё 15</button>
+            </div>
+            <div class="history-counter" id="historyCounter"></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="journalModal">
+    <div class="modal" style="max-width: 640px;">
+        <div class="modal-header">
+            <h2>🖨️ Печать журнала заявок</h2>
+            <button class="modal-close" onclick="closeJournalModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="journal-grid">
+                <div class="form-group">
+                    <label>Период с</label>
+                    <div class="date-field">
+                        <input type="text" class="date-text" placeholder="дд.мм.гггг" inputmode="numeric" maxlength="10" autocomplete="off">
+                        <button type="button" class="date-btn" title="Выбрать в календаре" tabindex="-1">📅</button>
+                        <input type="date" class="date-native" tabindex="-1" aria-hidden="true" id="journalFrom">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>по</label>
+                    <div class="date-field">
+                        <input type="text" class="date-text" placeholder="дд.мм.гггг" inputmode="numeric" maxlength="10" autocomplete="off">
+                        <button type="button" class="date-btn" title="Выбрать в календаре" tabindex="-1">📅</button>
+                        <input type="date" class="date-native" tabindex="-1" aria-hidden="true" id="journalTo">
+                    </div>
+                </div>
+                <div class="form-group journal-wide">
+                    <label>Подразделение</label>
+                    <select id="journalDept"><option value="">Все</option></select>
+                </div>
+            </div>
+
+            <div class="journal-modes">
+                <label class="journal-mode">
+                    <input type="radio" name="journalMode" value="undone" checked>
+                    <span>
+                        <strong>Только невыполненное</strong>
+                        <small>Заявки, по которым что-то не привезено, и только эти позиции</small>
+                    </span>
+                </label>
+                <label class="journal-mode">
+                    <input type="radio" name="journalMode" value="full">
+                    <span>
+                        <strong>Полный журнал</strong>
+                        <small>Все заявки за период, все позиции с отметкой выполнения</small>
+                    </span>
+                </label>
+            </div>
+
+            <div class="journal-hint">Журнал откроется в новом окне. Чем длиннее период, тем дольше загрузка.</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeJournalModal()">Отмена</button>
+            <button class="btn btn-primary" onclick="printJournal()">🖨️ Сформировать</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="orderDetailsModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>📄 Заявка <span id="detailsOrderNumber"></span></h2>
+            <button class="modal-close" onclick="closeOrderDetails()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="order-details-header">
+                <div class="detail-item">
+                    <label>№ заявки</label>
+                    <span id="detailNumber">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Дата</label>
+                    <span id="detailDate">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Подразделение</label>
+                    <span id="detailDepartment">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Объект</label>
+                    <span id="detailObject">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Категория</label>
+                    <span id="detailCategory">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Создал заявку</label>
+                    <span id="detailCreatedBy">-</span>
+                </div>
+                <div class="detail-item">
+                    <label>Просмотрено</label>
+                    <span id="detailViewedWrap"></span>
+                </div>
+                <div class="detail-item">
+                    <label>Выполнение</label>
+                    <span id="detailProgress">-</span>
+                </div>
+            </div>
+
+            <div class="positions-table-container">
+                <table class="positions-table with-got">
+                    <thead>
+                        <tr>
+                            <th class="col-num">№</th>
+                            <th class="col-name">Наименование материала</th>
+                            <th class="col-unit">Ед. изм.</th>
+                            <th class="col-qty">Кол-во</th>
+                            <th class="col-article">Артикул/Код</th>
+                            <th class="col-note">Примечание</th>
+                            <th class="col-got">Привезено</th>
+                            <th class="col-status">Статус</th>
+                            <th class="col-files">Файл</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailsPositionsBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="printOrderDetails(false)">🖨️ Печать</button>
+            <button class="btn btn-secondary" id="printPhotosBtn" onclick="printOrderDetails(true)" style="display: none;">🖨️ Печать с фото</button>
+            <button class="btn btn-danger" id="deleteOrderBtn" onclick="deleteCurrentOrder()" style="display: none;">🗑️ Удалить</button>
+            <button class="btn btn-primary" onclick="closeOrderDetails()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="queueModal">
+    <div class="modal" style="max-width: 700px;">
+        <div class="modal-header">
+            <h2>📤 Очередь отправки</h2>
+            <button class="modal-close" onclick="closeQueueModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="queue-hint" id="queueHint" style="display:none;"></div>
+            <div class="queue-list" id="queueListBody"></div>
+            <div class="queue-empty" id="queueEmpty" style="display:none;">Очередь пуста</div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="clearSentQueue()">🧹 Убрать отправленные</button>
+            <button class="btn btn-primary" onclick="closeQueueModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="filesModal">
+    <div class="modal" style="max-width: 820px;">
+        <div class="modal-header">
+            <h2>📎 Вложения — позиция <span id="filesModalPos"></span></h2>
+            <button class="modal-close" onclick="closeFilesModal()">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="files-subtitle" id="filesModalName"></div>
+            <div class="files-grid" id="filesGrid"></div>
+            <div class="files-empty" id="filesEmpty" style="display:none;">Вложений нет</div>
+            <div class="files-hint" id="filesHint"></div>
+        </div>
+        <div class="modal-footer files-footer">
+            <!-- Три отдельных поля выбора: камера, галерея и файл (фото или PDF).
+                 Поле со смешанным accept (image + pdf) Android открывает как
+                 файловый менеджер без камеры, поэтому для камеры и галереи
+                 свои поля только с image/*. Поля не скрыты через display:none,
+                 а кнопки сделаны <label for>: так касание доходит до поля
+                 и во встроенных браузерах мессенджеров. -->
+            <input type="file" id="fileInputCamera" class="file-input-hidden" tabindex="-1"
+                   accept="image/*" capture="environment" onchange="handleFilePick(event)">
+            <input type="file" id="fileInputGallery" class="file-input-hidden" tabindex="-1"
+                   accept="image/*" multiple onchange="handleFilePick(event)">
+            <input type="file" id="fileInput" class="file-input-hidden" tabindex="-1"
+                   accept="image/*,application/pdf" multiple onchange="handleFilePick(event)">
+            <label for="fileInputCamera" class="btn btn-primary file-pick pick-mobile" tabindex="0">📷 Камера</label>
+            <label for="fileInputGallery" class="btn btn-primary file-pick pick-mobile" tabindex="0">🖼️ Галерея</label>
+            <label for="fileInput" class="btn btn-primary file-pick pick-any" tabindex="0">
+                <span class="pick-label-desktop">📎 Добавить файл</span><span class="pick-label-mobile">📄 Файл / PDF</span>
+            </label>
+            <button class="btn btn-secondary" onclick="closeFilesModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<div class="queue-indicator" id="queueIndicator" onclick="openQueueModal()">
+    <span class="qi-dot"></span>
+    <span class="qi-text" id="queueIndicatorText">Очередь</span>
+    <span class="qi-count" id="queueIndicatorCount">0</span>
+</div>
+
+<script>
+// ============================================================
+// КОНФИГУРАЦИЯ И ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// ============================================================
+
+const API_URL = 'https://script.google.com/macros/s/AKfycbwCMXnkBgheVwoTcwkwq85mVAK9KpXJ_o-FNCTJH6p16_ScPFbMfOuSai5AfENC9IOE/exec';
+
+const API_TIMEOUT = 180000;      // 3 минуты
+const QUEUE_STORAGE_KEY = 'pendingRequests';
+const DRAFT_KEY = 'orderDraft';
+const MAX_UNSENT = 3;            // максимум неотправленных заявок в очереди
+const MAX_SENT_KEPT = 10;        // сколько отправленных держим в списке
+const HISTORY_PAGE = 15;         // сколько заявок грузим за раз
+const JOURNAL_PAGE = 100;        // журнал: сколько заявок просим за запрос (сервер может отдать меньше)
+const JOURNAL_DAYS = 30;         // журнал: период по умолчанию, дней
+const JOURNAL_PARALLEL = 4;      // журнал: сколько заявок загружаем одновременно
+const JOURNAL_SORT_MARGIN = 3 * 24 * 3600 * 1000;   // журнал: запас на заявки, отправленные с опозданием
+const RETRY_DELAYS = [20000, 60000, 150000];  // автоповтор: 20с, 60с, 150с
+
+// --- Вложения -----------------------------------------------
+let MAX_FILE_BYTES = 5 * 1024 * 1024;   // сервер пришлёт своё значение при входе
+let MAX_FILES_PER_POSITION = 3;
+const IMG_MAX_SIDE = 1600;
+const IMG_QUALITY = 0.7;
+const IDB_NAME = 'materialsFiles';
+const IDB_STORE = 'blobs';
+const VERIFY_TRIES = 5;
+const PRINT_PHOTO_SIZE = 1600;          // размер фото, которое запрашиваем с Диска для печати
+const PRINT_PHOTOS_TIMEOUT = 45000;     // сколько ждём загрузки фото перед печатью
+
+let currentUser = { role: '', department: '', employees: [], password: '' };
+let settings = { units: [], categories: [], departments: [], allDepartments: [] };
+let currentOrderId = null;
+let currentOrderNumber = '';
+let currentOrderViewed = 0;
+let currentOrderPositions = [];
+let currentOrderFiles = [];
+let currentOrderCanChange = false;   // можно ли отмечать привезённое в открытой заявке
+let positionRowCount = 0;
+
+// Файлы, приложенные в форме создания (заявка ещё не имеет ID с сервера).
+// Ключ - rowId строки позиции.
+let stagedFiles = {};
+let filesCtx = null;             // что сейчас открыто в окне вложений
+
+let historyOffset = 0;
+let historyTotal = 0;
+let historyLoading = false;
+
+let queueWorkerBusy = false;
+let queueRetryTimer = null;
+let toastTimer = null;
+let draftTimer = null;
+
+// ============================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ============================================================
+
+// Экранирование текста перед вставкой в HTML
+function esc(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function showLoading() { document.getElementById('loadingOverlay').classList.add('active'); }
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('active'); }
+
+function showToast(message, type) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = 'toast ' + (type || 'success') + ' active';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { toast.classList.remove('active'); }, 5000);
+}
+
+function formatDate(date) {
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return day + '.' + month + '.' + year + ' ' + hours + ':' + minutes;
+}
+
+function formatSize(bytes) {
+    var b = Number(bytes) || 0;
+    if (b < 1024) return b + ' Б';
+    if (b < 1048576) return Math.round(b / 1024) + ' КБ';
+    return (b / 1048576).toFixed(1) + ' МБ';
+}
+
+function sleep(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+
+function newId(prefix) {
+    return prefix + '_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+}
+
+// ============================================================
+// ПОЛЕ ДАТЫ
+//
+// Встроенное поле даты браузер подписывает по региональным настройкам
+// компьютера ("dd-mm-jjjj" и т.п.), и страница это поменять не может.
+// Поэтому человек видит обычное текстовое поле "дд.мм.гггг", а скрытое
+// встроенное поле хранит значение (гггг-мм-дд, его id читает остальной
+// код) и открывает календарь по кнопке 📅.
+// ============================================================
+
+// 'гггг-мм-дд' -> 'дд.мм.гггг'
+function isoToRuDate(iso) {
+    var p = String(iso || '').split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : '';
+}
+
+// 'дд.мм.гггг' -> 'гггг-мм-дд'; пустая строка, если такой даты нет
+function ruDateToIso(text) {
+    var m = String(text || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+    if (!m) return '';
+    var d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    if (d.getFullYear() !== Number(m[3]) || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[1])) return '';
+    return m[3] + '-' + m[2] + '-' + m[1];
+}
+
+// Точки ставим сами по мере набора: "07102026" -> "07.10.2026".
+// Если человек ставит точку сам, однозначные день и месяц дополняем
+// нулём: "7.3." -> "07.03."
+function maskRuDate(raw) {
+    var s = String(raw || '');
+    var parts = s.split(/\D+/);
+    if (parts.length > 1) {
+        if (parts[0].length === 1) parts[0] = '0' + parts[0];
+        if (parts.length > 2 && parts[1].length === 1) parts[1] = '0' + parts[1];
+    }
+    var digits = parts.join('').slice(0, 8);
+    var out = digits.slice(0, 2);
+    if (digits.length > 2) out += '.' + digits.slice(2, 4);
+    if (digits.length > 4) out += '.' + digits.slice(4);
+    if (/\D$/.test(s) && (digits.length === 2 || digits.length === 4)) out += '.';
+    return out;
+}
+
+// Значение из кода: и в скрытое поле, и в видимый текст
+function setDateValue(id, iso) {
+    var native = document.getElementById(id);
+    if (!native) return;
+    native.value = iso || '';
+    var text = native.parentNode.querySelector('.date-text');
+    if (text) {
+        text.value = isoToRuDate(native.value);
+        text.classList.remove('invalid');
+    }
+}
+
+function initDateField(wrap) {
+    var text = wrap.querySelector('.date-text');
+    var btn = wrap.querySelector('.date-btn');
+    var native = wrap.querySelector('.date-native');
+
+    // Полную верную дату (или пустое поле) передаём в скрытое поле -
+    // его onchange работает как раньше
+    function commit(iso) {
+        if (native.value === iso) return;
+        native.value = iso;
+        native.dispatchEvent(new Event('change'));
+    }
+
+    text.addEventListener('input', function() {
+        var pos = text.selectionStart;
+        if (pos !== null && pos < text.value.length) {
+            // Правка в середине (например, меняют только день): текст не
+            // переделываем, иначе добавится ноль, курсор убежит в конец
+            // и сохранится не та дата. Убираем только лишние символы
+            var clean = text.value.replace(/[^\d.]/g, '');
+            if (clean !== text.value) {
+                var keep = text.value.slice(0, pos).replace(/[^\d.]/g, '').length;
+                text.value = clean;
+                text.setSelectionRange(keep, keep);
+            }
+        } else {
+            text.value = maskRuDate(text.value);
+        }
+        if (text.value === '') {
+            text.classList.remove('invalid');
+            commit('');
+            return;
+        }
+        var iso = ruDateToIso(text.value);
+        text.classList.toggle('invalid', text.value.length === 10 && !iso);
+        if (iso) commit(iso);
+    });
+
+    // Уходя из поля, дописываем дату до полной ("7.3.26" -> "07.03.2026").
+    // Если не вышло - не подменяем молча прежней датой, а подсвечиваем
+    text.addEventListener('blur', function() {
+        if (!text.value) { text.classList.remove('invalid'); return; }
+        var full = maskRuDate(text.value).replace(/^(\d{2})\.(\d{2})\.(\d{2})$/, '$1.$2.20$3');
+        var iso = ruDateToIso(full);
+        if (iso) {
+            text.value = full;
+            text.classList.remove('invalid');
+            commit(iso);
+        } else {
+            text.classList.add('invalid');
+        }
+    });
+
+    // Дата выбрана в календаре
+    native.addEventListener('change', function() {
+        text.value = isoToRuDate(native.value);
+        text.classList.remove('invalid');
+    });
+
+    btn.addEventListener('click', function() {
+        try {
+            if (native.showPicker) { native.showPicker(); return; }
+        } catch (e) { }
+        native.focus();
+        native.click();
+    });
+}
+
+// ============================================================
+// API: GET через JSONP (всё, кроме содержимого файлов)
+//
+// Отказы делим на два вида:
+//   transport: true  - связь/таймаут, данные в порядке, повтор имеет смысл
+//   без него         - отказ сервера по существу, повтор даст то же самое
+// ============================================================
+
+function apiRequest(params) {
+    return new Promise(function(resolve) {
+        const callbackName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+        const url = new URL(API_URL);
+
+        Object.keys(params).forEach(function(key) {
+            url.searchParams.append(key, params[key]);
+        });
+        url.searchParams.append('callback', callbackName);
+
+        let isResolved = false;
+        let timeoutId = null;
+        let script = null;
+
+        function cleanup() {
+            isResolved = true;
+            if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+            try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+            if (script && script.parentNode) script.parentNode.removeChild(script);
+        }
+
+        window[callbackName] = function(data) {
+            if (!isResolved) { resolve(data); cleanup(); }
+        };
+
+        timeoutId = setTimeout(function() {
+            if (!isResolved) {
+                console.warn('Таймаут запроса (' + (API_TIMEOUT / 1000) + ' с). Действие:', params.action);
+                resolve({
+                    success: false,
+                    error: 'Сервер долго отвечает. Проверьте историю заявок.',
+                    timeout: true,
+                    transport: true
+                });
+                cleanup();
+            }
+        }, API_TIMEOUT);
+
+        script = document.createElement('script');
+        script.src = url.toString();
+        script.onerror = function() {
+            if (!isResolved) {
+                resolve({ success: false, error: 'Нет связи с сервером', transport: true });
+                cleanup();
+            }
+        };
+        document.head.appendChild(script);
+    });
+}
+
+// ============================================================
+// API: POST - единственный путь для содержимого файлов.
+// Content-Type: text/plain, чтобы браузер не делал
+// предварительный запрос OPTIONS, который Apps Script не умеет.
+// ============================================================
+
+function apiPost(payload) {
+    return new Promise(function(resolve) {
+        if (!window.fetch) {
+            resolve({ success: false, transport: true, error: 'Браузер не умеет отправлять файлы' });
+            return;
+        }
+
+        var controller = null;
+        var timer = null;
+        try { controller = new AbortController(); } catch (e) { controller = null; }
+
+        var opts = {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload),
+            redirect: 'follow'
+        };
+        if (controller) {
+            opts.signal = controller.signal;
+            timer = setTimeout(function() { try { controller.abort(); } catch (e) { } }, API_TIMEOUT);
+        }
+
+        fetch(API_URL, opts)
+            .then(function(res) { return res.text(); })
+            .then(function(text) {
+                if (timer) clearTimeout(timer);
+                var data = null;
+                try { data = JSON.parse(text); } catch (e) { data = null; }
+                if (!data) {
+                    resolve({ success: false, transport: true, error: 'Сервер вернул неожиданный ответ' });
+                    return;
+                }
+                resolve(data);
+            })
+            .catch(function(err) {
+                if (timer) clearTimeout(timer);
+                var aborted = err && err.name === 'AbortError';
+                resolve({
+                    success: false,
+                    transport: true,
+                    timeout: aborted,
+                    error: aborted ? 'Сервер долго отвечает' : 'Нет связи с сервером'
+                });
+            });
+    });
+}
+
+// Запасной путь: отправка формы в скрытый iframe. Работает даже там,
+// где fetch упирается в CORS. Ответ прочитать нельзя - результат
+// проверяем отдельным запросом по метке clientId.
+function postViaForm(payload) {
+    return new Promise(function(resolve) {
+        var frameName = newId('upl');
+        var iframe = document.createElement('iframe');
+        iframe.name = frameName;
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = API_URL;
+        form.target = frameName;
+        form.enctype = 'application/x-www-form-urlencoded';
+        form.style.display = 'none';
+
+        var ta = document.createElement('textarea');
+        ta.name = 'payload';
+        ta.value = JSON.stringify(payload);
+        form.appendChild(ta);
+
+        document.body.appendChild(form);
+        try { form.submit(); } catch (e) { }
+
+        // Убираем узлы сильно позже: отправка большого файла продолжается
+        setTimeout(function() {
+            try { document.body.removeChild(form); } catch (e) { }
+            try { document.body.removeChild(iframe); } catch (e) { }
+        }, 120000);
+
+        setTimeout(resolve, 5000);
+    });
+}
+
+// Проверяем, дошёл ли файл: ищем метку среди записанных на сервере
+async function verifyUpload(orderId, clientId) {
+    for (var attempt = 0; attempt < VERIFY_TRIES; attempt++) {
+        await sleep(attempt === 0 ? 5000 : 7000);
+        var res = await apiRequest({
+            action: 'getFiles',
+            password: currentUser.password,
+            orderId: orderId
+        });
+        var files = (res && res.success && Array.isArray(res.files)) ? res.files : [];
+        for (var i = 0; i < files.length; i++) {
+            if (files[i].clientId === clientId) return files[i];
+        }
+    }
+    return null;
+}
+
+// ============================================================
+// ХРАНИЛИЩЕ СОДЕРЖИМОГО ФАЙЛОВ (IndexedDB)
+//
+// localStorage держит только строки и ограничен примерно пятью
+// мегабайтами на весь сайт - фото туда не положить. IndexedDB
+// хранит Blob как есть, без перевода в текст.
+// Если IndexedDB недоступен (приватный режим, запрет в настройках),
+// файл живёт в памяти вкладки - об этом предупреждаем.
+// ============================================================
+
+let idbPromise = null;
+let idbBroken = false;
+const memBlobs = {};
+
+function idbOpen() {
+    if (idbBroken) return Promise.resolve(null);
+    if (idbPromise) return idbPromise;
+    idbPromise = new Promise(function(resolve) {
+        try {
+            if (!window.indexedDB) { idbBroken = true; return resolve(null); }
+            var req = indexedDB.open(IDB_NAME, 1);
+            req.onupgradeneeded = function() {
+                var db = req.result;
+                if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+            };
+            req.onsuccess = function() { resolve(req.result); };
+            req.onerror = function() { idbBroken = true; resolve(null); };
+            req.onblocked = function() { idbBroken = true; resolve(null); };
+        } catch (e) { idbBroken = true; resolve(null); }
+    });
+    return idbPromise;
+}
+
+function idbTx(mode, fn) {
+    return idbOpen().then(function(db) {
+        if (!db) return { ok: false, value: null };
+        return new Promise(function(resolve) {
+            try {
+                var tx = db.transaction(IDB_STORE, mode);
+                var store = tx.objectStore(IDB_STORE);
+                var req = fn(store);
+                req.onsuccess = function() { resolve({ ok: true, value: req.result }); };
+                req.onerror = function() { resolve({ ok: false, value: null }); };
+                tx.onabort = function() { resolve({ ok: false, value: null }); };
+            } catch (e) { resolve({ ok: false, value: null }); }
+        });
+    });
+}
+
+async function blobStorePut(key, blob) {
+    var r = await idbTx('readwrite', function(s) { return s.put(blob, key); });
+    if (!r.ok) { memBlobs[key] = blob; return false; }
+    return true;
+}
+
+async function blobStoreGet(key) {
+    if (memBlobs[key]) return memBlobs[key];
+    var r = await idbTx('readonly', function(s) { return s.get(key); });
+    return (r.ok && r.value) ? r.value : null;
+}
+
+async function blobStoreDel(key) {
+    delete memBlobs[key];
+    await idbTx('readwrite', function(s) { return s.delete(key); });
+}
+
+async function blobStoreKeys() {
+    var r = await idbTx('readonly', function(s) { return s.getAllKeys(); });
+    return (r.ok && r.value) ? r.value : [];
+}
+
+// Файлы, на которые уже никто не ссылается, удаляем при загрузке страницы
+async function cleanupOrphanBlobs() {
+    try {
+        var keys = await blobStoreKeys();
+        if (!keys || keys.length === 0) return;
+
+        var keep = {};
+        queueLoad().forEach(function(it) {
+            if ((it.kind || 'card') === 'file' && it.status !== 'sent') keep[it.id] = true;
+        });
+        var raw = null;
+        try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { }
+        if (raw) {
+            var d = JSON.parse(raw);
+            var staged = (d && d.staged) || {};
+            Object.keys(staged).forEach(function(rid) {
+                (staged[rid] || []).forEach(function(m) { keep[m.id] = true; });
+            });
+        }
+        keys.forEach(function(k) { if (!keep[k]) blobStoreDel(k); });
+    } catch (e) { }
+}
+
+// ============================================================
+// СЖАТИЕ ФОТО И ПЕРЕВОД В BASE64
+//
+// Результат забираем как Blob (canvas.toBlob), а не строкой
+// (toDataURL): в хранилище он займёт на треть меньше.
+// В base64 переводим один раз, непосредственно перед отправкой.
+// ============================================================
+
+function compressImage(file) {
+    return new Promise(function(resolve) {
+        if (!file || !file.type || file.type.indexOf('image/') !== 0) return resolve(file);
+
+        var url;
+        try { url = URL.createObjectURL(file); } catch (e) { return resolve(file); }
+
+        var img = new Image();
+        img.onload = function() {
+            try {
+                var w = img.naturalWidth || img.width;
+                var h = img.naturalHeight || img.height;
+                if (!w || !h) { URL.revokeObjectURL(url); return resolve(file); }
+
+                var scale = Math.min(1, IMG_MAX_SIDE / Math.max(w, h));
+                var cw = Math.max(1, Math.round(w * scale));
+                var ch = Math.max(1, Math.round(h * scale));
+
+                var canvas = document.createElement('canvas');
+                canvas.width = cw;
+                canvas.height = ch;
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, cw, ch);
+                ctx.drawImage(img, 0, 0, cw, ch);
+
+                canvas.toBlob(function(blob) {
+                    URL.revokeObjectURL(url);
+                    if (!blob) return resolve(file);
+                    // Если сжатие не дало выигрыша и размер не менялся - оставляем оригинал
+                    if (scale === 1 && blob.size >= file.size) return resolve(file);
+                    resolve(blob);
+                }, 'image/jpeg', IMG_QUALITY);
+            } catch (e) {
+                try { URL.revokeObjectURL(url); } catch (e2) { }
+                resolve(file);
+            }
+        };
+        img.onerror = function() {
+            try { URL.revokeObjectURL(url); } catch (e) { }
+            resolve(file);   // формат, который браузер не рисует (например HEIC) - шлём как есть
+        };
+        img.src = url;
+    });
+}
+
+function blobToBase64(blob) {
+    return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function() {
+            var s = String(reader.result || '');
+            var comma = s.indexOf(',');
+            resolve(comma >= 0 ? s.slice(comma + 1) : s);
+        };
+        reader.onerror = function() { reject(new Error('read')); };
+        try { reader.readAsDataURL(blob); } catch (e) { reject(e); }
+    });
+}
+
+// ============================================================
+// АВТОРИЗАЦИЯ
+// ============================================================
+
+async function handleLogin() {
+    const password = document.getElementById('passwordInput').value.trim();
+    const errorDiv = document.getElementById('loginError');
+
+    if (!password) {
+        errorDiv.textContent = 'Введите пароль';
+        return;
+    }
+
+    showLoading();
+    errorDiv.textContent = '';
+
+    // Один запрос вместо двух: login + настройки сразу
+    const result = await apiRequest({ action: 'init', password: password });
+    hideLoading();
+
+    if (result.success) {
+        applyInitResult(result, password);
+        showMainScreen();
+        showToast('Добро пожаловать!', 'success');
+        queueProcess();
+    } else {
+        errorDiv.textContent = result.timeout
+            ? 'Сервер не отвечает. Попробуйте ещё раз.'
+            : (result.error || 'Неверный пароль');
+    }
+}
+
+function applyInitResult(result, password) {
+    currentUser = {
+        role: result.role,
+        department: result.department,
+        employees: result.employees || [],
+        password: password
+    };
+    settings = {
+        units: result.units || [],
+        categories: result.categories || [],
+        departments: result.departments || [],
+        allDepartments: result.allDepartments || result.departments || []
+    };
+    if (result.maxFileBytes) MAX_FILE_BYTES = result.maxFileBytes;
+    if (result.maxFilesPerPosition) MAX_FILES_PER_POSITION = result.maxFilesPerPosition;
+
+    sessionStorage.setItem('user', JSON.stringify(currentUser));
+    populateSelects();
+}
+
+function handleLogout() {
+    const unsent = queueUnsentCount();
+    if (unsent > 0 && !confirm('В очереди ' + unsent + ' неотправленных записей. Они останутся в памяти браузера и уйдут после следующего входа. Выйти?')) {
+        return;
+    }
+    sessionStorage.removeItem('user');
+    currentUser = { role: '', department: '', employees: [], password: '' };
+    document.getElementById('mainScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('loginError').textContent = '';
+    showToast('Вы вышли из системы', 'success');
+}
+
+async function checkSession() {
+    const savedUser = sessionStorage.getItem('user');
+    if (!savedUser) return;
+    try { currentUser = JSON.parse(savedUser); } catch (e) { return; }
+
+    showLoading();
+    const result = await apiRequest({ action: 'init', password: currentUser.password });
+    hideLoading();
+
+    if (result.success) {
+        applyInitResult(result, currentUser.password);
+        showMainScreen();
+        queueProcess();
+    } else {
+        sessionStorage.removeItem('user');
+    }
+}
+
+// ============================================================
+// СПРАВОЧНИКИ
+// ============================================================
+
+function populateSelects() {
+    var isAdmin = currentUser.role === 'admin';
+
+    var deptSelect = document.getElementById('orderDepartment');
+    deptSelect.innerHTML = '';
+    if (isAdmin) {
+        deptSelect.disabled = false;
+        settings.departments.forEach(function(dept) {
+            deptSelect.innerHTML += '<option value="' + esc(dept) + '">' + esc(dept) + '</option>';
+        });
+    } else {
+        deptSelect.disabled = true;
+        deptSelect.innerHTML = '<option value="' + esc(currentUser.department) + '">' + esc(currentUser.department) + '</option>';
+    }
+
+    var catSelect = document.getElementById('orderCategory');
+    catSelect.innerHTML = '<option value="">Выберите...</option>';
+    settings.categories.forEach(function(cat) {
+        catSelect.innerHTML += '<option value="' + esc(cat) + '">' + esc(cat) + '</option>';
+    });
+
+    var createdBySelect = document.getElementById('orderCreatedBy');
+    createdBySelect.innerHTML = '<option value="">Выберите...</option>';
+    currentUser.employees.forEach(function(emp) {
+        createdBySelect.innerHTML += '<option value="' + esc(emp) + '">' + esc(emp) + '</option>';
+    });
+
+    // Общий пул: фильтр по подразделениям доступен всем
+    var filterDeptSelect = document.getElementById('filterDepartment');
+    filterDeptSelect.innerHTML = '<option value="">Все</option>';
+    filterDeptSelect.disabled = false;
+    settings.allDepartments.forEach(function(dept) {
+        filterDeptSelect.innerHTML += '<option value="' + esc(dept) + '">' + esc(dept) + '</option>';
+    });
+
+    var journalDeptSelect = document.getElementById('journalDept');
+    journalDeptSelect.innerHTML = filterDeptSelect.innerHTML;
+    // Подразделению по умолчанию показываем его заявки, администратору - все
+    journalDeptSelect.value = isAdmin ? '' : (currentUser.department || '');
+    if (journalDeptSelect.selectedIndex < 0) journalDeptSelect.value = '';
+
+    // Приватная заявка - только для администратора
+    document.getElementById('privateGroup').style.display = isAdmin ? 'flex' : 'none';
+}
+
+function showMainScreen() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainScreen').style.display = 'block';
+    document.getElementById('userDepartment').textContent =
+        currentUser.role === 'admin' ? 'Администратор' : currentUser.department;
+    // Форму сбрасываем БЕЗ удаления черновика - иначе восстанавливать будет нечего
+    resetForm();
+    restoreDraft();
+}
+
+// ============================================================
+// УПРАВЛЕНИЕ ПОЗИЦИЯМИ
+// ============================================================
+
+function addPositionRow(data, forcedRowId) {
+    var tbody = document.getElementById('positionsBody');
+    var currentRows = tbody.querySelectorAll('tr').length;
+
+    if (currentRows >= 15) {
+        showToast('Максимум 15 позиций', 'warning');
+        return;
+    }
+
+    var rowId;
+    if (forcedRowId) {
+        rowId = String(forcedRowId);
+        var n = parseInt(rowId.replace(/^r/, ''), 10);
+        if (!isNaN(n) && n > positionRowCount) positionRowCount = n;
+    } else {
+        positionRowCount++;
+        rowId = 'r' + positionRowCount;
+    }
+
+    var rowNum = currentRows + 1;
+
+    var unitsOptions = '<option value="">-</option>';
+    settings.units.forEach(function(unit) {
+        var selected = (data && data.unit === unit) ? ' selected' : '';
+        unitsOptions += '<option value="' + esc(unit) + '"' + selected + '>' + esc(unit) + '</option>';
+    });
+
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-row-id', rowId);
+    tr.innerHTML =
+        '<td class="col-num">' + rowNum + '</td>' +
+        '<td class="col-name"><input type="text" placeholder="Наименование" value="' + esc(data ? data.name : '') + '"></td>' +
+        '<td class="col-unit"><select>' + unitsOptions + '</select></td>' +
+        '<td class="col-qty"><input type="number" min="0" step="0.01" placeholder="0" value="' + esc(data ? data.quantity : '') + '"></td>' +
+        '<td class="col-article"><input type="text" placeholder="Артикул" value="' + esc(data ? data.article : '') + '"></td>' +
+        '<td class="col-note"><input type="text" placeholder="Примечание" value="' + esc(data ? data.note : '') + '"></td>' +
+        '<td class="col-files"></td>' +
+        '<td class="col-action"><button class="delete-row-btn" onclick="deletePositionRow(this)">✕</button></td>';
+
+    tbody.appendChild(tr);
+    renderRowFileButton(tr);
+}
+
+function deletePositionRow(btn) {
+    var tbody = document.getElementById('positionsBody');
+    if (tbody.querySelectorAll('tr').length <= 1) {
+        showToast('Должна остаться хотя бы одна позиция', 'warning');
+        return;
+    }
+    var tr = btn.closest('tr');
+    var rowId = tr.getAttribute('data-row-id');
+
+    var attached = (stagedFiles[rowId] || []).length;
+    if (attached > 0 && !confirm('К позиции приложено файлов: ' + attached + '. Удалить позицию вместе с ними?')) {
+        return;
+    }
+    (stagedFiles[rowId] || []).forEach(function(m) { blobStoreDel(m.id); });
+    delete stagedFiles[rowId];
+
+    tr.remove();
+    renumberPositions();
+    scheduleDraftSave();
+}
+
+function renumberPositions() {
+    var rows = document.getElementById('positionsBody').querySelectorAll('tr');
+    rows.forEach(function(row, index) {
+        row.querySelector('.col-num').textContent = index + 1;
+    });
+}
+
+function getPositionsData() {
+    var rows = document.getElementById('positionsBody').querySelectorAll('tr');
+    var positions = [];
+
+    rows.forEach(function(row) {
+        var inputs = row.querySelectorAll('input');
+        var select = row.querySelector('select');
+        var name = inputs[0].value.trim();
+        var quantity = inputs[1].value.trim();
+
+        if (name || quantity) {
+            positions.push({
+                rowId: row.getAttribute('data-row-id'),
+                name: name,
+                unit: select.value,
+                quantity: quantity,
+                article: inputs[2].value.trim(),
+                note: inputs[3].value.trim()
+            });
+        }
+    });
+
+    return positions;
+}
+
+// Все строки формы, включая пустые - для черновика
+function collectAllRows() {
+    var out = [];
+    document.getElementById('positionsBody').querySelectorAll('tr').forEach(function(tr) {
+        var inputs = tr.querySelectorAll('input');
+        var select = tr.querySelector('select');
+        out.push({
+            rowId: tr.getAttribute('data-row-id'),
+            name: inputs[0].value,
+            unit: select.value,
+            quantity: inputs[1].value,
+            article: inputs[2].value,
+            note: inputs[3].value
+        });
+    });
+    return out;
+}
+
+// Сброс полей формы. Черновик и приложенные файлы не трогает -
+// этим занимается clearForm.
+function resetForm() {
+    document.getElementById('orderNumber').value = '';
+    document.getElementById('orderDate').value = formatDate(new Date());
+    document.getElementById('orderObject').value = '';
+    document.getElementById('orderCategory').value = '';
+    document.getElementById('orderCreatedBy').value = '';
+    document.getElementById('orderPrivate').checked = false;
+    document.getElementById('positionsBody').innerHTML = '';
+    positionRowCount = 0;
+    addPositionRow();
+}
+
+// Полная очистка: поля, черновик и приложенные, но не отправленные файлы
+function clearForm() {
+    Object.keys(stagedFiles).forEach(function(rid) {
+        (stagedFiles[rid] || []).forEach(function(m) { blobStoreDel(m.id); });
+    });
+    stagedFiles = {};
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
+    resetForm();
+}
+
+function formHasData() {
+    if (document.getElementById('orderObject').value.trim()) return true;
+    if (document.getElementById('orderCategory').value) return true;
+    var rows = document.getElementById('positionsBody').querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i++) {
+        var inputs = rows[i].querySelectorAll('input');
+        if (inputs[0].value.trim() || inputs[1].value.trim()) return true;
+    }
+    return false;
+}
+
+// ============================================================
+// ЧЕРНОВИК ЗАЯВКИ
+//
+// Пишется по каждому изменению, восстанавливается при возврате
+// на страницу. Очищается только когда заявка ушла в очередь
+// (данные к этому моменту уже надёжно лежат в localStorage)
+// либо по кнопке "Очистить".
+// ============================================================
+
+function scheduleDraftSave() {
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, 400);
+}
+
+function saveDraft() {
+    if (!currentUser.password) return;
+    try {
+        var rows = collectAllRows();
+        var draft = {
+            department: document.getElementById('orderDepartment').value,
+            object: document.getElementById('orderObject').value,
+            category: document.getElementById('orderCategory').value,
+            createdBy: document.getElementById('orderCreatedBy').value,
+            isPrivate: document.getElementById('orderPrivate').checked ? '1' : '0',
+            rows: rows,
+            staged: stagedFiles
+        };
+
+        var hasFiles = Object.keys(stagedFiles).some(function(k) { return (stagedFiles[k] || []).length > 0; });
+        var hasText = !!(draft.object || draft.category || draft.createdBy) ||
+            rows.some(function(r) { return r.name || r.quantity || r.article || r.note; });
+
+        if (!hasText && !hasFiles) { localStorage.removeItem(DRAFT_KEY); return; }
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (e) { }
+}
+
+function restoreDraft() {
+    var raw = null;
+    try { raw = localStorage.getItem(DRAFT_KEY); } catch (e) { }
+    if (!raw) { refreshFormFileButtons(); return; }
+
+    var d = null;
+    try { d = JSON.parse(raw); } catch (e) { return; }
+    if (!d) return;
+
+    if (currentUser.role === 'admin' && d.department) {
+        document.getElementById('orderDepartment').value = d.department;
+    }
+    document.getElementById('orderObject').value = d.object || '';
+    document.getElementById('orderCategory').value = d.category || '';
+    document.getElementById('orderCreatedBy').value = d.createdBy || '';
+    document.getElementById('orderPrivate').checked = d.isPrivate === '1';
+
+    stagedFiles = d.staged || {};
+
+    var tbody = document.getElementById('positionsBody');
+    tbody.innerHTML = '';
+    positionRowCount = 0;
+    (d.rows || []).forEach(function(r) { addPositionRow(r, r.rowId); });
+    if (tbody.querySelectorAll('tr').length === 0) addPositionRow();
+
+    refreshFormFileButtons();
+    showToast('Восстановлен незаконченный черновик заявки', 'warning');
+}
+
+// ============================================================
+// БУФЕР ОЧЕРЕДИ ОТПРАВКИ
+//
+// В очереди лежат записи двух видов:
+//   kind: 'card' - заявка
+//   kind: 'file' - вложение (содержимое лежит в IndexedDB)
+// У записей от прежней версии интерфейса поля kind нет -
+// считаем такие заявками, чтобы обновление не ломало недошедшее.
+//
+// Каждая запись несёт clientId (он же id) - сервер по нему
+// отсекает повторы, поэтому автоматическая досылка не создаёт
+// ни второй заявки, ни второго файла.
+//
+// Статусы: pending -> sending -> sent | error
+// ============================================================
+
+function queueLoad() {
+    try {
+        var raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function queueSave(arr) {
+    try {
+        localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(arr));
+    } catch (e) {
+        console.warn('Не удалось сохранить очередь:', e);
+        showToast('Не удалось сохранить очередь в памяти браузера', 'error');
+    }
+}
+
+function queueAdd(item) {
+    var arr = queueLoad();
+    arr.push(item);
+    queueSave(queueTrim(arr));
+    renderQueue();
+}
+
+function queueUpdate(id, changes) {
+    var arr = queueLoad();
+    for (var i = 0; i < arr.length; i++) {
+        if (arr[i].id === id) {
+            for (var k in changes) { arr[i][k] = changes[k]; }
+            break;
+        }
+    }
+    queueSave(arr);
+    renderQueue();
+}
+
+function queueRemove(id) {
+    queueSave(queueLoad().filter(function(it) { return it.id !== id; }));
+    renderQueue();
+}
+
+function queueGet(id) {
+    var arr = queueLoad();
+    for (var i = 0; i < arr.length; i++) { if (arr[i].id === id) return arr[i]; }
+    return null;
+}
+
+function queueKind(item) { return (item && item.kind) || 'card'; }
+
+// Оставляем в списке только последние отправленные, чтобы он не рос
+// бесконечно. Заявку, к которой ещё привязаны неотправленные файлы,
+// не трогаем: файл берёт из неё ID заявки.
+function queueTrim(arr) {
+    var referenced = {};
+    arr.forEach(function(it) {
+        if (queueKind(it) === 'file' && it.status !== 'sent' && it.orderQueueId) {
+            referenced[it.orderQueueId] = true;
+        }
+    });
+    var sent = arr.filter(function(it) { return it.status === 'sent' && !referenced[it.id]; });
+    if (sent.length <= MAX_SENT_KEPT) return arr;
+    var extra = sent.slice(0, sent.length - MAX_SENT_KEPT);
+    return arr.filter(function(it) { return extra.indexOf(it) === -1; });
+}
+
+function queueUnsentCount() {
+    return queueLoad().filter(function(it) { return it.status !== 'sent'; }).length;
+}
+
+function queueUnsentCards() {
+    return queueLoad().filter(function(it) { return queueKind(it) === 'card' && it.status !== 'sent'; }).length;
+}
+
+function clearSentQueue() {
+    var arr = queueLoad();
+    var referenced = {};
+    arr.forEach(function(it) {
+        if (queueKind(it) === 'file' && it.status !== 'sent' && it.orderQueueId) {
+            referenced[it.orderQueueId] = true;
+        }
+    });
+    queueSave(arr.filter(function(it) { return it.status !== 'sent' || referenced[it.id]; }));
+    renderQueue();
+}
+
+// При загрузке страницы: зависшие "sending" возвращаем в очередь.
+// Повторная отправка безопасна - сервер отсечёт дубль по clientId.
+function queueRecoverStuck() {
+    var arr = queueLoad();
+    var changed = false;
+    arr.forEach(function(it) {
+        if (it.status === 'sending') {
+            it.status = 'pending';
+            it.lastError = '';
+            changed = true;
+        }
+    });
+    if (changed) queueSave(arr);
+}
+
+// ------------------------------------------------------------
+// Фоновый обработчик: отправляет записи строго по одной
+// ------------------------------------------------------------
+
+async function queueProcess() {
+    if (queueWorkerBusy) return;
+    if (!currentUser.password) { renderQueue(); return; }
+
+    var arr = queueLoad();
+    var next = null;
+
+    for (var i = 0; i < arr.length; i++) {
+        var it = arr[i];
+        if (it.status !== 'pending') continue;
+
+        // Вложение, приложенное при создании заявки: ждём, пока заявка
+        // получит ID с сервера, и только потом отправляем файл
+        if (queueKind(it) === 'file' && !it.orderId) {
+            var parent = null;
+            for (var j = 0; j < arr.length; j++) {
+                if (arr[j].id === it.orderQueueId) { parent = arr[j]; break; }
+            }
+            if (!parent) {
+                dropFileItem(it, 'Заявка, к которой приложен файл «' + it.fileName + '», потеряна. Приложите файл заново.');
+                setTimeout(queueProcess, 300);
+                return;
+            }
+            if (parent.status !== 'sent' || !parent.orderId) continue;   // ещё не время
+            it.orderId = parent.orderId;
+            it.orderNumber = parent.orderNumber || '';
+            queueUpdate(it.id, { orderId: it.orderId, orderNumber: it.orderNumber });
+        }
+
+        next = it;
+        break;
+    }
+
+    if (!next) { renderQueue(); return; }
+
+    var kind = queueKind(next);
+    queueWorkerBusy = true;
+    queueUpdate(next.id, { status: 'sending', lastError: '' });
+
+    var result;
+    if (kind === 'file') {
+        result = await sendFileItem(next);
+    } else {
+        result = await sendCardItem(next);
+    }
+
+    queueWorkerBusy = false;
+
+    // --- Успех ---
+    if (result && result.success) {
+        if (kind === 'file') {
+            queueUpdate(next.id, { status: 'sent', lastError: '' });
+            blobStoreDel(next.id);
+            if (result.file && currentOrderId && currentOrderId === next.orderId) {
+                var already = currentOrderFiles.some(function(f) { return f.clientId === result.file.clientId; });
+                if (!already) currentOrderFiles.push(result.file);
+            }
+            showToast('Файл «' + next.fileName + '» отправлен', 'success');
+        } else {
+            queueUpdate(next.id, {
+                status: 'sent',
+                orderNumber: result.orderNumber,
+                orderId: result.orderId,
+                lastError: ''
+            });
+            // Сразу проставляем ID заявки её вложениям: дальше они живут
+            // самостоятельно и не зависят от того, есть ли ещё заявка в очереди
+            backfillFileOrderIds(next.id, result.orderId, result.orderNumber);
+            showToast('Заявка ' + result.orderNumber + ' записана', 'success');
+        }
+        refreshAllFileViews();
+        setTimeout(queueProcess, 400);
+        return;
+    }
+
+    // --- Файла нет в хранилище: повторять нечего ---
+    if (result && result.missing) {
+        dropFileItem(next, 'Файл «' + next.fileName + '» не найден в памяти браузера. Приложите его заново.');
+        setTimeout(queueProcess, 400);
+        return;
+    }
+
+    var transport = !!(result && (result.transport || result.timeout));
+    var msg = (result && result.error) || 'Нет связи с сервером';
+
+    // --- Отказ сервера по существу: со второй попытки будет то же самое ---
+    if (!transport) {
+        if (kind === 'file') {
+            dropFileItem(next, 'Файл «' + next.fileName + '» не принят: ' + msg);
+        } else if (!formHasData()) {
+            restoreCardToForm(next, msg);
+        } else {
+            // Форма занята другой заявкой - не затираем её, ждём решения человека
+            queueUpdate(next.id, { status: 'error', lastError: msg, rejected: true, attempts: 99 });
+            showToast('Заявка не принята: ' + msg + '. Откройте «Очередь» и верните её в форму.', 'error');
+        }
+        setTimeout(queueProcess, 400);
+        return;
+    }
+
+    // --- Обрыв связи: данные в порядке, ставим повтор ---
+    var attempts = (next.attempts || 0) + 1;
+    var human = (result && result.timeout)
+        ? 'Сервер долго отвечает. Повтор безопасен - дубля не будет.'
+        : msg;
+    queueUpdate(next.id, { status: 'error', lastError: human, attempts: attempts });
+    showToast((kind === 'file' ? 'Файл не ушёл: ' : 'Заявка не ушла: ') + human, 'warning');
+    scheduleQueueRetry(attempts);
+}
+
+async function sendCardItem(item) {
+    return await apiRequest({
+        action: 'saveOrder',
+        password: currentUser.password,
+        clientId: item.id,
+        localDate: item.payload.localDate,
+        department: item.payload.department,
+        object: item.payload.object,
+        category: item.payload.category,
+        createdBy: item.payload.createdBy,
+        isPrivate: item.payload.isPrivate || '0',
+        positions: item.payload.positions
+    });
+}
+
+async function sendFileItem(item) {
+    var blob = await blobStoreGet(item.id);
+    if (!blob) return { success: false, missing: true, error: 'Файл не найден в памяти браузера' };
+
+    var b64;
+    try {
+        b64 = await blobToBase64(blob);
+    } catch (e) {
+        return { success: false, missing: true, error: 'Не удалось прочитать файл' };
+    }
+
+    var payload = {
+        action: 'uploadFile',
+        password: currentUser.password,
+        clientId: item.id,
+        orderId: item.orderId,
+        positionNum: item.positionNum,
+        fileName: item.fileName,
+        mimeType: item.mimeType || blob.type || 'application/octet-stream',
+        uploadedBy: item.uploadedBy || '',
+        data: b64
+    };
+
+    var res = await apiPost(payload);
+    if (res && res.success) return res;
+
+    if (res && res.transport) {
+        // fetch не прошёл - пробуем форму в скрытом iframe и проверяем итог
+        try { await postViaForm(payload); } catch (e) { }
+        var found = await verifyUpload(item.orderId, item.id);
+        if (found) return { success: true, file: found, recovered: true };
+    }
+    return res;
+}
+
+function backfillFileOrderIds(queueId, orderId, orderNumber) {
+    if (!orderId) return;
+    var arr = queueLoad();
+    var changed = false;
+    arr.forEach(function(it) {
+        if (queueKind(it) === 'file' && it.orderQueueId === queueId && !it.orderId) {
+            it.orderId = orderId;
+            it.orderNumber = orderNumber || '';
+            changed = true;
+        }
+    });
+    if (changed) queueSave(arr);
+}
+
+function dropFileItem(item, message) {
+    queueRemove(item.id);
+    // Содержимое стираем, только если на него больше никто не ссылается:
+    // тот же файл может лежать в форме, ожидая новой заявки
+    if (!isStaged(item.id)) blobStoreDel(item.id);
+    showToast(message, 'error');
+    refreshAllFileViews();
+}
+
+function isStaged(fileId) {
+    return Object.keys(stagedFiles).some(function(rid) {
+        return (stagedFiles[rid] || []).some(function(m) { return m.id === fileId; });
+    });
+}
+
+// Отказ по существу: возвращаем введённое в форму вместе с файлами,
+// чтобы человеку не пришлось набирать всё заново
+function restoreCardToForm(item, errText) {
+    try {
+        var p = item.payload || {};
+        document.getElementById('orderObject').value = p.object || '';
+        document.getElementById('orderCategory').value = p.category || '';
+        document.getElementById('orderCreatedBy').value = p.createdBy || '';
+        if (currentUser.role === 'admin') {
+            if (p.department) document.getElementById('orderDepartment').value = p.department;
+            document.getElementById('orderPrivate').checked = p.isPrivate === '1';
+        }
+
+        var positions = [];
+        try { positions = JSON.parse(decodeURIComponent(p.positions)); } catch (e) { positions = []; }
+
+        var tbody = document.getElementById('positionsBody');
+        tbody.innerHTML = '';
+        positionRowCount = 0;
+        positions.forEach(function(pos) { addPositionRow(pos); });
+        if (tbody.querySelectorAll('tr').length === 0) addPositionRow();
+
+        // Файлы этой заявки возвращаем на свои позиции.
+        // Сначала вынимаем их из очереди и только потом правим поля:
+        // если сделать наоборот, отбор по orderQueueId уже не найдёт их,
+        // файл останется в очереди без заявки и будет выброшен вместе
+        // со своим содержимым.
+        var rows = tbody.querySelectorAll('tr');
+        var arr = queueLoad();
+        var myFiles = arr.filter(function(f) {
+            return queueKind(f) === 'file' && f.orderQueueId === item.id;
+        });
+
+        queueSave(arr.filter(function(it) {
+            if (it.id === item.id) return false;
+            return myFiles.indexOf(it) === -1;
+        }));
+
+        myFiles.forEach(function(f) {
+            var tr = rows[(f.positionNum || 1) - 1];
+            if (!tr) { blobStoreDel(f.id); return; }
+            var rid = tr.getAttribute('data-row-id');
+            f.orderQueueId = '';
+            f.orderId = '';
+            f.orderNumber = '';
+            f.status = 'pending';
+            f.attempts = 0;
+            f.lastError = '';
+            f.rowId = rid;
+            stagedFiles[rid] = (stagedFiles[rid] || []).concat([f]);
+        });
+
+        renumberPositions();
+        refreshFormFileButtons();
+        saveDraft();
+        renderQueue();
+    } catch (e) {
+        queueRemove(item.id);
+    }
+    showToast('Заявка не принята: ' + errText + '. Данные возвращены в форму.', 'error');
+}
+
+function returnQueueItemToForm(id) {
+    var item = queueGet(id);
+    if (!item) return;
+    if (formHasData() && !confirm('В форме есть незаконченная заявка. Заменить её данными из очереди?')) return;
+    restoreCardToForm(item, item.lastError || 'отказ сервера');
+    closeQueueModal();
+}
+
+function scheduleQueueRetry(attempts) {
+    if (attempts > RETRY_DELAYS.length) return;   // дальше только вручную
+    var delay = RETRY_DELAYS[attempts - 1];
+    if (queueRetryTimer) clearTimeout(queueRetryTimer);
+    queueRetryTimer = setTimeout(function() {
+        queueRetryTimer = null;
+        var arr = queueLoad();
+        var changed = false;
+        arr.forEach(function(it) {
+            if (it.status === 'error' && !it.rejected && (it.attempts || 0) <= RETRY_DELAYS.length) {
+                it.status = 'pending';
+                changed = true;
+            }
+        });
+        if (changed) { queueSave(arr); renderQueue(); }
+        queueProcess();
+    }, delay);
+}
+
+function retryQueueItem(id) {
+    if (!currentUser.password) {
+        showToast('Сначала войдите в систему', 'warning');
+        return;
+    }
+    queueUpdate(id, { status: 'pending', lastError: '', attempts: 0, rejected: false });
+    queueProcess();
+}
+
+function removeQueueItem(id) {
+    var item = queueGet(id);
+    if (!item) return;
+    if (item.status !== 'sent') {
+        var what = queueKind(item) === 'file' ? 'файл' : 'заявку';
+        if (!confirm('Убрать ' + what + ' из очереди? Он не будет отправлен.')) return;
+    }
+    if (queueKind(item) === 'file') blobStoreDel(item.id);
+
+    // Заявку убираем вместе с её неотправленными файлами
+    if (queueKind(item) === 'card') {
+        queueLoad().forEach(function(it) {
+            if (queueKind(it) === 'file' && it.orderQueueId === id && it.status !== 'sent') {
+                blobStoreDel(it.id);
+            }
+        });
+        queueSave(queueLoad().filter(function(it) {
+            return it.id !== id && !(queueKind(it) === 'file' && it.orderQueueId === id && it.status !== 'sent');
+        }));
+        renderQueue();
+    } else {
+        queueRemove(id);
+    }
+    refreshAllFileViews();
+}
+
+// ------------------------------------------------------------
+// Отрисовка очереди
+// ------------------------------------------------------------
+
+function renderQueue() {
+    renderQueueIndicator();
+    renderSendProgress();
+    if (document.getElementById('queueModal').classList.contains('active')) {
+        renderQueueList();
+    }
+}
+
+function renderSendProgress() {
+    var hasSending = queueLoad().some(function(it) { return it.status === 'sending'; });
+    document.getElementById('sendProgress').classList.toggle('active', hasSending);
+}
+
+function renderQueueIndicator() {
+    var arr = queueLoad();
+    var indicator = document.getElementById('queueIndicator');
+    if (!indicator) return;
+
+    if (arr.length === 0) {
+        indicator.classList.remove('visible');
+        return;
+    }
+
+    var hasSending = arr.some(function(it) { return it.status === 'sending'; });
+    var hasError = arr.some(function(it) { return it.status === 'error'; });
+    var hasPending = arr.some(function(it) { return it.status === 'pending'; });
+    var unsent = arr.filter(function(it) { return it.status !== 'sent'; }).length;
+
+    indicator.classList.remove('state-sending', 'state-pending', 'state-error', 'state-sent');
+
+    var label = 'Очередь';
+    if (hasSending) { indicator.classList.add('state-sending'); label = 'Отправка...'; }
+    else if (hasError) { indicator.classList.add('state-error'); label = 'Не ушло'; }
+    else if (hasPending) { indicator.classList.add('state-pending'); label = 'Ожидание'; }
+    else { indicator.classList.add('state-sent'); label = 'Отправлено'; }
+
+    document.getElementById('queueIndicatorText').textContent = label;
+    document.getElementById('queueIndicatorCount').textContent = unsent > 0 ? unsent : arr.length;
+    indicator.classList.add('visible');
+}
+
+function statusLabel(status, kind) {
+    if (status === 'pending') return 'В очереди';
+    if (status === 'sending') return 'Отправка';
+    if (status === 'error') return kind === 'file' ? 'Не ушёл' : 'Не ушла';
+    if (status === 'sent') return kind === 'file' ? 'Отправлен' : 'Записана';
+    return status;
+}
+
+function renderQueueList() {
+    var body = document.getElementById('queueListBody');
+    var empty = document.getElementById('queueEmpty');
+    var hint = document.getElementById('queueHint');
+    if (!body) return;
+
+    var arr = queueLoad();
+    body.innerHTML = '';
+
+    if (!currentUser.password && arr.some(function(it) { return it.status !== 'sent'; })) {
+        hint.textContent = 'Войдите в систему — записи уйдут автоматически.';
+        hint.style.display = 'block';
+    } else if (!navigator.onLine) {
+        hint.textContent = 'Нет подключения. Записи уйдут, как только связь восстановится.';
+        hint.style.display = 'block';
+    } else {
+        hint.style.display = 'none';
+    }
+
+    if (arr.length === 0) {
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+
+    arr.slice().reverse().forEach(function(item) {
+        var kind = queueKind(item);
+        var title, sub;
+
+        if (kind === 'file') {
+            title = '📎 ' + esc(item.fileName || 'файл');
+            var where = item.orderNumber
+                ? 'Заявка ' + esc(item.orderNumber)
+                : (item.orderId ? 'Заявка' : 'Ждёт отправки заявки');
+            sub = where + ' • позиция ' + esc(item.positionNum || '-') + ' • ' + formatSize(item.fileSize);
+        } else {
+            title = item.orderNumber
+                ? 'Заявка ' + esc(item.orderNumber)
+                : 'Заявка от ' + esc((item.payload && item.payload.createdBy) || '-');
+            var posCount = 0;
+            try { posCount = JSON.parse(decodeURIComponent(item.payload.positions)).length; } catch (e) { }
+            sub = esc((item.payload && item.payload.department) || '-') + ' • ' +
+                  esc((item.payload && item.payload.object) || '-') + ' • ' +
+                  esc((item.payload && item.payload.category) || '-') +
+                  ' • позиций: ' + posCount;
+        }
+
+        var errHtml = (item.status === 'error' && item.lastError)
+            ? '<div class="qitem-err">' + esc(item.lastError) + '</div>' : '';
+
+        var actionsHtml = '';
+        if (item.status === 'error' && item.rejected && kind === 'card') {
+            actionsHtml += '<button class="btn btn-primary" onclick="returnQueueItemToForm(\'' + esc(item.id) + '\')">↩ В форму</button>';
+        } else if (item.status === 'error') {
+            actionsHtml += '<button class="btn btn-primary" onclick="retryQueueItem(\'' + esc(item.id) + '\')">↻ Отправить</button>';
+        }
+        if (item.status !== 'sending') {
+            actionsHtml += '<button class="btn btn-danger" onclick="removeQueueItem(\'' + esc(item.id) + '\')">✕ Убрать</button>';
+        }
+
+        var div = document.createElement('div');
+        div.className = 'queue-item kind-' + kind;
+        div.innerHTML =
+            '<div class="qitem-main">' +
+                '<div class="qitem-title">' + title + '</div>' +
+                '<div class="qitem-sub">' + sub + '</div>' +
+                '<div class="qitem-sub">Создана: ' + esc(item.createdAt) + '</div>' +
+                errHtml +
+                '<span class="qitem-status ' + esc(item.status) + '">' + esc(statusLabel(item.status, kind)) + '</span>' +
+            '</div>' +
+            '<div class="qitem-actions">' + actionsHtml + '</div>';
+        body.appendChild(div);
+    });
+}
+
+function openQueueModal() {
+    renderQueueList();
+    document.getElementById('queueModal').classList.add('active');
+}
+
+function closeQueueModal() {
+    document.getElementById('queueModal').classList.remove('active');
+}
+
+// ============================================================
+// ВЛОЖЕНИЯ: подсчёт и кнопки-скрепки
+// ============================================================
+
+// Неотправленные вложения открытой заявки
+function queuedFilesFor(orderId, positionNum) {
+    return queueLoad().filter(function(it) {
+        return queueKind(it) === 'file' &&
+               it.status !== 'sent' &&
+               it.orderId === orderId &&
+               Number(it.positionNum) === Number(positionNum);
+    });
+}
+
+function filesCountForOrderPosition(orderId, positionNum) {
+    var server = currentOrderFiles.filter(function(f) {
+        return f.orderId === orderId && Number(f.positionNum) === Number(positionNum);
+    }).length;
+    var queued = queuedFilesFor(orderId, positionNum).length;
+    return { total: server + queued, pending: queued };
+}
+
+function fileButtonHtml(onclickCode, total, pending) {
+    var cls = 'file-btn';
+    if (pending > 0) cls += ' pending';
+    else if (total > 0) cls += ' has-files';
+    var badge = total > 0 ? '<span class="file-count">' + total + '</span>' : '';
+    return '<button class="' + cls + '" title="Вложения" onclick="' + onclickCode + '">📎' + badge + '</button>';
+}
+
+// --- Форма создания -----------------------------------------
+
+function renderRowFileButton(tr) {
+    var rowId = tr.getAttribute('data-row-id');
+    var cell = tr.querySelector('.col-files');
+    if (!cell) return;
+    var count = (stagedFiles[rowId] || []).length;
+    cell.innerHTML = fileButtonHtml('openFilesForRow(this)', count, count);
+}
+
+function refreshFormFileButtons() {
+    document.getElementById('positionsBody').querySelectorAll('tr').forEach(function(tr) {
+        renderRowFileButton(tr);
+    });
+}
+
+function openFilesForRow(btn) {
+    var tr = btn.closest('tr');
+    var rows = Array.prototype.slice.call(tr.parentNode.children);
+    var nameInput = tr.querySelector('input');
+    filesCtx = {
+        mode: 'form',
+        rowId: tr.getAttribute('data-row-id'),
+        posIndex: rows.indexOf(tr) + 1,
+        posName: (nameInput && nameInput.value.trim()) || ''
+    };
+    openFilesModal();
+}
+
+// --- Открытая заявка ----------------------------------------
+
+function refreshDetailsFileButtons() {
+    if (!currentOrderId) return;
+    document.getElementById('detailsPositionsBody').querySelectorAll('tr').forEach(function(tr) {
+        var posNum = tr.getAttribute('data-position');
+        var cell = tr.querySelector('.col-files');
+        if (!cell || posNum === null) return;
+        var c = filesCountForOrderPosition(currentOrderId, posNum);
+        cell.innerHTML = fileButtonHtml('openFilesForPosition(' + Number(posNum) + ')', c.total, c.pending);
+    });
+    refreshPrintPhotosButton();
+}
+
+function isPdfFile(f) {
+    return f.mimeType === 'application/pdf' || /\.pdf$/i.test(f.origName || f.name || '');
+}
+
+// Кнопка "Печать с фото" видна, только если у заявки есть фото на сервере
+function refreshPrintPhotosButton() {
+    var btn = document.getElementById('printPhotosBtn');
+    if (!btn) return;
+    var count = currentOrderFiles.filter(function(f) { return !isPdfFile(f); }).length;
+    btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    btn.textContent = '🖨️ Печать с фото (' + count + ')';
+}
+
+function openFilesForPosition(positionNum) {
+    var pos = null;
+    for (var i = 0; i < currentOrderPositions.length; i++) {
+        if (Number(currentOrderPositions[i].position) === Number(positionNum)) {
+            pos = currentOrderPositions[i];
+            break;
+        }
+    }
+    filesCtx = {
+        mode: 'order',
+        orderId: currentOrderId,
+        orderNumber: currentOrderNumber,
+        positionNum: Number(positionNum),
+        posName: pos ? pos.name : ''
+    };
+    openFilesModal();
+}
+
+function refreshAllFileViews() {
+    refreshFormFileButtons();
+    refreshDetailsFileButtons();
+    if (filesCtx && document.getElementById('filesModal').classList.contains('active')) {
+        renderFilesModal();
+    }
+}
+
+// ============================================================
+// ОКНО ВЛОЖЕНИЙ
+// ============================================================
+
+function openFilesModal() {
+    renderFilesModal();
+    document.getElementById('filesModal').classList.add('active');
+}
+
+function closeFilesModal() {
+    document.getElementById('filesModal').classList.remove('active');
+    filesCtx = null;
+    refreshFormFileButtons();
+    refreshDetailsFileButtons();
+}
+
+function currentFilesList() {
+    if (!filesCtx) return [];
+    if (filesCtx.mode === 'form') {
+        return (stagedFiles[filesCtx.rowId] || []).map(function(m) { return { local: m }; });
+    }
+    var out = currentOrderFiles
+        .filter(function(f) {
+            return f.orderId === filesCtx.orderId && Number(f.positionNum) === filesCtx.positionNum;
+        })
+        .map(function(f) { return { server: f }; });
+
+    queuedFilesFor(filesCtx.orderId, filesCtx.positionNum).forEach(function(m) {
+        out.push({ local: m });
+    });
+    return out;
+}
+
+function renderFilesModal() {
+    var ctx = filesCtx;
+    if (!ctx) return;
+
+    document.getElementById('filesModalPos').textContent =
+        ctx.mode === 'form' ? ctx.posIndex : ctx.positionNum;
+    document.getElementById('filesModalName').textContent =
+        (ctx.posName ? ctx.posName : 'Наименование не заполнено') +
+        (ctx.mode === 'order' && ctx.orderNumber ? '  •  заявка ' + ctx.orderNumber : '');
+
+    var grid = document.getElementById('filesGrid');
+    var empty = document.getElementById('filesEmpty');
+    var hint = document.getElementById('filesHint');
+    var list = currentFilesList();
+
+    grid.innerHTML = '';
+    empty.style.display = list.length ? 'none' : 'block';
+
+    var isAdmin = currentUser.role === 'admin';
+    list.forEach(function(entry) {
+        grid.appendChild(entry.server
+            ? buildServerFileCard(entry.server, isAdmin)
+            : buildLocalFileCard(entry.local));
+    });
+
+    var left = MAX_FILES_PER_POSITION - list.length;
+    setFilePickersEnabled(left > 0);
+    hint.textContent = left > 0
+        ? 'Можно приложить ещё ' + left + ' (фото или PDF, до ' + Math.round(MAX_FILE_BYTES / 1048576) + ' МБ). Фото сжимается автоматически.'
+        : 'Достигнут предел: ' + MAX_FILES_PER_POSITION + ' файла на позицию.';
+    renderWebviewHint(left > 0);
+}
+
+// Кнопки выбора - это <label>, атрибута disabled у них нет:
+// блокируем сами поля и гасим кнопки классом
+function setFilePickersEnabled(enabled) {
+    ['fileInputCamera', 'fileInputGallery', 'fileInput'].forEach(function(id) {
+        var input = document.getElementById(id);
+        if (input) input.disabled = !enabled;
+    });
+    document.querySelectorAll('#filesModal .file-pick').forEach(function(label) {
+        label.classList.toggle('is-disabled', !enabled);
+        label.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        label.tabIndex = enabled ? 0 : -1;
+    });
+}
+
+// Страница открыта во встроенном браузере приложения (Telegram, WhatsApp,
+// Viber, MAX, VK и т.п.), а не в Chrome/Safari. Там выбор файла
+// иногда не работает - подсказываем, как открыть в обычном браузере
+function isInAppBrowser() {
+    var ua = navigator.userAgent || '';
+    if (/; wv\)|Telegram|WhatsApp|Viber|FBAN|FBAV|Instagram|VKAndroidApp|VKClient|OKApp|MicroMessenger|MAX\//i.test(ua)) return true;
+    // iPhone/iPad: у встроенных браузеров приложений нет метки Safari
+    if (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)) return true;
+    return false;
+}
+
+function renderWebviewHint(show) {
+    var modalBody = document.querySelector('#filesModal .modal-body');
+    var box = document.getElementById('filesWebviewHint');
+    if (!show || !isInAppBrowser()) {
+        if (box) box.style.display = 'none';
+        return;
+    }
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'filesWebviewHint';
+        box.className = 'files-webview-hint';
+        box.textContent = 'Если фото не прикрепляется, откройте эту страницу в обычном браузере: ' +
+            'меню ⋮ или ⋯ вверху → «Открыть в браузере».';
+        modalBody.appendChild(box);
+    }
+    box.style.display = 'block';
+}
+
+// С клавиатуры кнопку-<label> открываем по Enter и пробелу
+document.addEventListener('keydown', function(e) {
+    var el = e.target;
+    if (!el || !el.classList || !el.classList.contains('file-pick')) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    var input = document.getElementById(el.getAttribute('for'));
+    if (input && !input.disabled) input.click();
+});
+
+function buildServerFileCard(f, isAdmin) {
+    var card = document.createElement('div');
+    card.className = 'file-card';
+
+    var thumbWrap = document.createElement('div');
+    thumbWrap.className = 'file-thumb-wrap';
+
+    if (isPdfFile(f)) {
+        thumbWrap.innerHTML = '<div class="file-thumb-icon">📄</div>';
+    } else {
+        var img = document.createElement('img');
+        img.className = 'file-thumb';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.onerror = function() { thumbWrap.innerHTML = '<div class="file-thumb-icon">🖼</div>'; };
+        img.src = f.thumbUrl;
+        thumbWrap.appendChild(img);
+    }
+    thumbWrap.onclick = function() { window.open(f.url, '_blank', 'noopener'); };
+    card.appendChild(thumbWrap);
+
+    var info = document.createElement('div');
+    info.innerHTML =
+        '<div class="file-name">' + esc(f.origName || f.name) + '</div>' +
+        '<div class="file-meta">' + formatSize(f.size) + ' • ' + esc(f.by || '-') + '</div>' +
+        '<div class="file-meta">' + esc(f.at || '') + '</div>';
+    card.appendChild(info);
+
+    var actions = document.createElement('div');
+    actions.className = 'file-actions';
+
+    var openBtn = document.createElement('button');
+    openBtn.className = 'btn btn-secondary';
+    openBtn.textContent = '↗ Открыть';
+    openBtn.onclick = function() { window.open(f.url, '_blank', 'noopener'); };
+    actions.appendChild(openBtn);
+
+    if (isAdmin) {
+        var delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-danger';
+        delBtn.textContent = '🗑 Удалить';
+        delBtn.onclick = function() { deleteServerFile(f); };
+        actions.appendChild(delBtn);
+    }
+    card.appendChild(actions);
+    return card;
+}
+
+function buildLocalFileCard(meta) {
+    var card = document.createElement('div');
+    card.className = 'file-card local';
+
+    var thumbWrap = document.createElement('div');
+    thumbWrap.className = 'file-thumb-wrap';
+    thumbWrap.innerHTML = '<div class="file-thumb-icon">⏳</div>';
+    card.appendChild(thumbWrap);
+
+    blobStoreGet(meta.id).then(function(blob) {
+        if (!blob) { thumbWrap.innerHTML = '<div class="file-thumb-icon">❓</div>'; return; }
+        if (blob.type === 'application/pdf') { thumbWrap.innerHTML = '<div class="file-thumb-icon">📄</div>'; return; }
+        try {
+            var url = URL.createObjectURL(blob);
+            thumbWrap.innerHTML = '';
+            var img = document.createElement('img');
+            img.className = 'file-thumb';
+            img.src = url;
+            thumbWrap.appendChild(img);
+            thumbWrap.onclick = function() { window.open(url, '_blank'); };
+        } catch (e) {
+            thumbWrap.innerHTML = '<div class="file-thumb-icon">🖼</div>';
+        }
+    });
+
+    var st = meta.status || 'pending';
+    var stText = st === 'sending' ? 'Отправляется' : (st === 'error' ? 'Не ушёл' : 'В очереди');
+    var stColor = st === 'error' ? '#ff6b6b' : '#ffc107';
+
+    var info = document.createElement('div');
+    info.innerHTML =
+        '<div class="file-name">' + esc(meta.fileName) + '</div>' +
+        '<div class="file-meta">' + formatSize(meta.fileSize) + ' • ' + esc(meta.createdAt || '') + '</div>' +
+        '<div class="file-meta" style="color:' + stColor + ';font-weight:bold;">' + stText + '</div>' +
+        (meta.lastError ? '<div class="file-meta" style="color:#ff6b6b;">' + esc(meta.lastError) + '</div>' : '');
+    card.appendChild(info);
+
+    var actions = document.createElement('div');
+    actions.className = 'file-actions';
+    var delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-danger';
+    delBtn.textContent = '✕ Убрать';
+    delBtn.onclick = function() { removeLocalFile(meta); };
+    actions.appendChild(delBtn);
+    card.appendChild(actions);
+
+    return card;
+}
+
+async function deleteServerFile(f) {
+    if (currentUser.role !== 'admin') {
+        showToast('Удалять вложения может только администратор', 'warning');
+        return;
+    }
+    if (!confirm('Удалить вложение «' + (f.origName || f.name) + '»?')) return;
+
+    showLoading();
+    var res = await apiRequest({
+        action: 'deleteFile',
+        password: currentUser.password,
+        clientId: f.clientId
+    });
+    hideLoading();
+
+    if (res && res.success) {
+        currentOrderFiles = currentOrderFiles.filter(function(x) { return x.clientId !== f.clientId; });
+        showToast('Вложение удалено', 'success');
+        refreshAllFileViews();
+    } else {
+        showToast((res && res.error) || 'Не удалось удалить вложение', 'error');
+    }
+}
+
+async function removeLocalFile(meta) {
+    if (meta.status === 'sending') {
+        showToast('Файл сейчас отправляется — дождитесь результата', 'warning');
+        return;
+    }
+    if (!confirm('Убрать файл «' + meta.fileName + '»? Он не будет отправлен.')) return;
+
+    if (filesCtx && filesCtx.mode === 'form') {
+        stagedFiles[filesCtx.rowId] = (stagedFiles[filesCtx.rowId] || [])
+            .filter(function(m) { return m.id !== meta.id; });
+        saveDraft();
+    } else {
+        queueRemove(meta.id);
+    }
+    await blobStoreDel(meta.id);
+    refreshAllFileViews();
+}
+
+// ------------------------------------------------------------
+// Выбор файла
+// ------------------------------------------------------------
+
+async function handleFilePick(event) {
+    var input = event.target;
+    var files = Array.prototype.slice.call(input.files || []);
+    input.value = '';   // чтобы тот же файл можно было выбрать повторно
+    if (files.length === 0 || !filesCtx) return;
+
+    for (var i = 0; i < files.length; i++) {
+        await attachOneFile(files[i]);
+    }
+    refreshAllFileViews();
+    queueProcess();
+}
+
+async function attachOneFile(file) {
+    var ctx = filesCtx;
+    if (!ctx) return;
+
+    if (currentFilesList().length >= MAX_FILES_PER_POSITION) {
+        showToast('К позиции можно приложить не больше ' + MAX_FILES_PER_POSITION + ' файлов', 'warning');
+        return;
+    }
+
+    var isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    var isImage = file.type && file.type.indexOf('image/') === 0;
+    if (!isPdf && !isImage) {
+        showToast('«' + file.name + '»: можно прикладывать только фото и PDF', 'error');
+        return;
+    }
+
+    showLoading();
+    var blob = file;
+    try { blob = await compressImage(file); } catch (e) { blob = file; }
+    hideLoading();
+
+    // Предел проверяем ДО постановки в очередь
+    if (blob.size > MAX_FILE_BYTES) {
+        showToast('«' + file.name + '» весит ' + formatSize(blob.size) +
+                  ' — больше предела в ' + Math.round(MAX_FILE_BYTES / 1048576) + ' МБ', 'error');
+        return;
+    }
+
+    var compressed = blob !== file;
+    var baseName = String(file.name || 'фото');
+    var fileName = compressed ? baseName.replace(/\.[^.]+$/, '') + '.jpg' : baseName;
+
+    var fileId = newId('f');
+    var stored = await blobStorePut(fileId, blob);
+    if (!stored) {
+        showToast('Браузер не даёт сохранить файл на диск — он держится в памяти вкладки. Не закрывайте её до отправки.', 'warning');
+    }
+
+    var meta = {
+        id: fileId,
+        kind: 'file',
+        status: 'pending',
+        orderId: ctx.mode === 'order' ? ctx.orderId : '',
+        orderNumber: ctx.mode === 'order' ? (ctx.orderNumber || '') : '',
+        orderQueueId: '',
+        positionNum: ctx.mode === 'order' ? ctx.positionNum : 0,
+        rowId: ctx.mode === 'form' ? ctx.rowId : '',
+        fileName: fileName,
+        fileSize: blob.size,
+        mimeType: blob.type || file.type || 'application/octet-stream',
+        uploadedBy: ctx.mode === 'form'
+            ? (document.getElementById('orderCreatedBy').value || '')
+            : (currentUser.role === 'admin' ? 'Администратор' : currentUser.department),
+        createdAt: formatDate(new Date()),
+        attempts: 0,
+        lastError: ''
+    };
+
+    if (ctx.mode === 'order') {
+        queueAdd(meta);
+        showToast('Файл поставлен в очередь на отправку', 'success');
+    } else {
+        stagedFiles[ctx.rowId] = (stagedFiles[ctx.rowId] || []).concat([meta]);
+        saveDraft();
+        showToast('Файл приложен — уйдёт сразу после заявки', 'success');
+    }
+}
+
+// ============================================================
+// СОХРАНЕНИЕ ЗАЯВКИ - постановка в очередь
+// ============================================================
+
+function saveOrder() {
+    var department = document.getElementById('orderDepartment').value;
+    var object = document.getElementById('orderObject').value.trim();
+    var category = document.getElementById('orderCategory').value;
+    var createdBy = document.getElementById('orderCreatedBy').value;
+    var isPrivate = document.getElementById('orderPrivate').checked ? '1' : '0';
+
+    if (!object) { showToast('Укажите объект', 'error'); return; }
+    if (!category) { showToast('Выберите категорию', 'error'); return; }
+    if (!createdBy) { showToast('Укажите, кто создал заявку', 'error'); return; }
+
+    var positions = getPositionsData();
+    if (positions.length === 0) { showToast('Добавьте хотя бы одну позицию', 'error'); return; }
+
+    for (var i = 0; i < positions.length; i++) {
+        if (!positions[i].name) { showToast('Укажите наименование в позиции ' + (i + 1), 'error'); return; }
+        if (!positions[i].unit) { showToast('Выберите ед. измерения в позиции ' + (i + 1), 'error'); return; }
+        if (!positions[i].quantity || positions[i].quantity <= 0) {
+            showToast('Укажите количество в позиции ' + (i + 1), 'error');
+            return;
+        }
+    }
+
+    if (queueUnsentCards() >= MAX_UNSENT) {
+        showToast('В очереди уже ' + MAX_UNSENT + ' неотправленных заявок. Дождитесь отправки.', 'warning');
+        openQueueModal();
+        return;
+    }
+
+    var queueId = newId('q');
+
+    // rowId нужен только внутри формы - на сервер его не шлём
+    var payloadPositions = positions.map(function(p) {
+        return { name: p.name, unit: p.unit, quantity: p.quantity, article: p.article, note: p.note };
+    });
+
+    queueAdd({
+        id: queueId,
+        kind: 'card',
+        status: 'pending',
+        createdAt: formatDate(new Date()),
+        orderNumber: '',
+        orderId: '',
+        lastError: '',
+        attempts: 0,
+        payload: {
+            department: department,
+            object: object,
+            category: category,
+            createdBy: createdBy,
+            isPrivate: isPrivate,
+            localDate: formatDate(new Date()),   // время с компьютера пользователя
+            positions: encodeURIComponent(JSON.stringify(payloadPositions))
+        }
+    });
+
+    // Файлы позиций: привязываем к заявке и ставим следом за ней.
+    // Номер позиции считаем по тому же списку, что ушёл на сервер.
+    var usedRows = {};
+    var attachedCount = 0;
+    positions.forEach(function(pos, index) {
+        usedRows[pos.rowId] = true;
+        (stagedFiles[pos.rowId] || []).forEach(function(meta) {
+            meta.orderQueueId = queueId;
+            meta.positionNum = index + 1;
+            meta.status = 'pending';
+            meta.attempts = 0;
+            meta.lastError = '';
+            meta.uploadedBy = meta.uploadedBy || createdBy;
+            queueAdd(meta);
+            attachedCount++;
+        });
+    });
+
+    // Файлы пустых строк, которые не попали в заявку, удаляем
+    Object.keys(stagedFiles).forEach(function(rid) {
+        if (usedRows[rid]) return;
+        (stagedFiles[rid] || []).forEach(function(m) { blobStoreDel(m.id); });
+    });
+    stagedFiles = {};
+
+    showToast(attachedCount > 0
+        ? 'Заявка и ' + attachedCount + ' файл(ов) поставлены в очередь'
+        : 'Заявка поставлена в очередь на отправку', 'success');
+
+    clearForm();
+    queueProcess();
+}
+
+// ============================================================
+// ИСТОРИЯ ЗАЯВОК (порциями по 15)
+// ============================================================
+
+function openHistory() {
+    document.getElementById('historyModal').classList.add('active');
+    loadHistory(false);
+}
+
+function closeHistory() {
+    document.getElementById('historyModal').classList.remove('active');
+}
+
+function clearFilters() {
+    document.getElementById('filterDepartment').value = '';
+    setDateValue('filterDate', '');
+    loadHistory(false);
+}
+
+async function loadHistory(append) {
+    if (historyLoading) return;
+    historyLoading = true;
+
+    var tbody = document.getElementById('historyBody');
+    var emptyDiv = document.getElementById('historyEmpty');
+    var loadMoreWrap = document.getElementById('loadMoreWrap');
+    var counter = document.getElementById('historyCounter');
+
+    if (!append) {
+        historyOffset = 0;
+        historyTotal = 0;
+        tbody.innerHTML = '';
+        loadMoreWrap.style.display = 'none';
+        counter.textContent = '';
+    }
+
+    var filterDept = document.getElementById('filterDepartment').value;
+    var filterDate = document.getElementById('filterDate').value;
+
+    var formattedDate = '';
+    if (filterDate) {
+        var parts = filterDate.split('-');   // yyyy-mm-dd
+        formattedDate = parts[2] + '.' + parts[1] + '.' + parts[0];
+    }
+
+    showLoading();
+    var result = await apiRequest({
+        action: 'getHistory',
+        password: currentUser.password,
+        filterDept: filterDept,
+        filterDate: formattedDate,
+        offset: historyOffset,
+        limit: HISTORY_PAGE
+    });
+    hideLoading();
+    historyLoading = false;
+
+    if (!result.success) {
+        emptyDiv.textContent = result.timeout
+            ? 'Сервер долго отвечает. Попробуйте ещё раз.'
+            : (result.error || 'Ошибка загрузки');
+        emptyDiv.style.display = tbody.querySelectorAll('tr').length === 0 ? 'block' : 'none';
+        return;
+    }
+
+    historyTotal = result.total || 0;
+    var orders = result.orders || [];
+
+    if (orders.length === 0 && historyOffset === 0) {
+        emptyDiv.textContent = 'Заявки не найдены';
+        emptyDiv.style.display = 'block';
+        loadMoreWrap.style.display = 'none';
+        counter.textContent = '';
+        return;
+    }
+
+    emptyDiv.style.display = 'none';
+    var isAdmin = currentUser.role === 'admin';
+
+    orders.forEach(function(order) {
+        var badge = progressBadge(Number(order.completedPositions) || 0, Number(order.totalPositions) || 0,
+                                  Number(order.partialPositions) || 0, false);
+
+        var viewedClass = order.viewed == 1 ? 'viewed' : 'not-viewed';
+        var viewedIcon = order.viewed == 1 ? '👁' : '✕';
+        var filesMark = order.filesCount > 0
+            ? ' <span title="Вложений: ' + order.filesCount + '">📎' + order.filesCount + '</span>'
+            : '';
+
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-order-id', order.id);
+        tr.onclick = function() { openOrderDetails(order.id); };
+        tr.innerHTML =
+            '<td><strong>' + esc(order.number) + '</strong>' +
+                (order.isPrivate == 1 ? ' 🔒' : '') + filesMark + '</td>' +
+            '<td>' + esc(order.date) + '</td>' +
+            '<td>' + esc(order.department) + '</td>' +
+            '<td>' + esc(order.object || '-') + '</td>' +
+            '<td>' + esc(order.category) + '</td>' +
+            '<td>' + esc(order.createdBy || '-') + '</td>' +
+            '<td class="cell-status"><span class="status-badge ' + badge.cls + '">' + esc(badge.text) + '</span></td>' +
+            '<td class="col-viewed">' +
+                '<button class="status-btn ' + viewedClass + '" ' +
+                    'title="' + (order.viewed == 1 ? 'Заявка просмотрена' : 'Заявка не просмотрена') + '" ' +
+                    'onclick="toggleViewed(event, \'' + esc(order.id) + '\', ' + (order.viewed == 1 ? 1 : 0) + ')" ' +
+                    (isAdmin ? '' : 'disabled') + '>' + viewedIcon + '</button>' +
+            '</td>';
+
+        tbody.appendChild(tr);
+    });
+
+    historyOffset += orders.length;
+    loadMoreWrap.style.display = result.hasMore ? 'block' : 'none';
+    counter.textContent = 'Показано ' + historyOffset + ' из ' + historyTotal;
+}
+
+// Обновляет одну строку истории без перезагрузки списка
+function updateHistoryRow(orderId, completed, total, viewed, partial) {
+    var tr = document.querySelector('#historyBody tr[data-order-id="' + orderId + '"]');
+    if (!tr) return;
+
+    if (completed !== null) {
+        var badge = progressBadge(completed, total, partial || 0, false);
+        var cell = tr.querySelector('.cell-status');
+        if (cell) cell.innerHTML = '<span class="status-badge ' + badge.cls + '">' + esc(badge.text) + '</span>';
+    }
+
+    if (viewed !== null) {
+        var btn = tr.querySelector('.col-viewed .status-btn');
+        if (btn) {
+            btn.className = 'status-btn ' + (viewed == 1 ? 'viewed' : 'not-viewed');
+            btn.textContent = viewed == 1 ? '👁' : '✕';
+            btn.setAttribute('onclick', 'toggleViewed(event, \'' + orderId + '\', ' + (viewed == 1 ? 1 : 0) + ')');
+        }
+    }
+}
+
+// ============================================================
+// ОТМЕТКА "ПРОСМОТРЕНО" (только администратор)
+// ============================================================
+
+async function toggleViewed(event, orderId, currentViewed) {
+    if (event) event.stopPropagation();
+    if (currentUser.role !== 'admin') {
+        showToast('Отметку ставит только администратор', 'warning');
+        return;
+    }
+
+    var newViewed = currentViewed == 1 ? 0 : 1;
+    showLoading();
+    var result = await apiRequest({
+        action: 'setViewed',
+        password: currentUser.password,
+        orderId: orderId,
+        viewed: newViewed
+    });
+    hideLoading();
+
+    if (result.success) {
+        updateHistoryRow(orderId, null, null, newViewed);
+        if (currentOrderId === orderId) {
+            currentOrderViewed = newViewed;
+            renderDetailViewed();
+        }
+        showToast(newViewed == 1 ? 'Отмечено как просмотренное' : 'Отметка снята', 'success');
+    } else {
+        showToast(result.error || 'Не удалось изменить отметку', 'error');
+    }
+}
+
+function renderDetailViewed() {
+    var wrap = document.getElementById('detailViewedWrap');
+    var isAdmin = currentUser.role === 'admin';
+    var viewed = currentOrderViewed == 1;
+
+    wrap.innerHTML =
+        '<button class="status-btn ' + (viewed ? 'viewed' : 'not-viewed') + '" ' +
+            'title="' + (viewed ? 'Просмотрена' : 'Не просмотрена') + '" ' +
+            'onclick="toggleViewed(event, \'' + esc(currentOrderId) + '\', ' + (viewed ? 1 : 0) + ')" ' +
+            (isAdmin ? '' : 'disabled') + '>' + (viewed ? '👁' : '✕') + '</button>';
+}
+
+// ============================================================
+// ДЕТАЛИ ЗАЯВКИ
+// ============================================================
+
+async function openOrderDetails(orderId) {
+    currentOrderId = orderId;
+    showLoading();
+
+    var result = await apiRequest({
+        action: 'getOrderDetails',
+        orderId: orderId,
+        password: currentUser.password
+    });
+
+    hideLoading();
+
+    if (!result.success) {
+        showToast(result.timeout ? 'Сервер долго отвечает. Попробуйте ещё раз.' : (result.error || 'Ошибка загрузки заявки'),
+                  result.timeout ? 'warning' : 'error');
+        return;
+    }
+
+    var order = result.order;
+    currentOrderViewed = order.viewed;
+    currentOrderNumber = order.number;
+    currentOrderPositions = result.positions || [];
+    // Ответ может прийти без массива вложений (старая версия скрипта) -
+    // подставляем пустой, чтобы отрисовка не падала
+    currentOrderFiles = Array.isArray(result.files) ? result.files : [];
+    if (result.maxFileBytes) MAX_FILE_BYTES = result.maxFileBytes;
+    if (result.maxFilesPerPosition) MAX_FILES_PER_POSITION = result.maxFilesPerPosition;
+
+    document.getElementById('detailsOrderNumber').textContent = order.number;
+    document.getElementById('detailNumber').textContent = order.number;
+    document.getElementById('detailDate').textContent = order.date;
+    document.getElementById('detailDepartment').textContent = order.department;
+    document.getElementById('detailObject').textContent = order.object || '-';
+    document.getElementById('detailCategory').textContent = order.category;
+    document.getElementById('detailCreatedBy').textContent = order.createdBy || '-';
+    renderDetailViewed();
+
+    document.getElementById('deleteOrderBtn').style.display =
+        result.canEdit ? 'inline-flex' : 'none';
+
+    // Общий пул: отмечать привезённое может любой пользователь
+    currentOrderCanChange = !!result.canChangeStatus;
+
+    var tbody = document.getElementById('detailsPositionsBody');
+    tbody.innerHTML = '';
+
+    currentOrderPositions.forEach(function(pos, idx) {
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-position', pos.position);
+        tr.setAttribute('data-idx', idx);
+        tr.innerHTML =
+            '<td class="col-num">' + esc(pos.position) + '</td>' +
+            '<td class="col-name">' + esc(pos.name) + '</td>' +
+            '<td class="col-unit">' + esc(pos.unit) + '</td>' +
+            '<td class="col-qty">' + esc(pos.quantity) + '</td>' +
+            '<td class="col-article">' + esc(pos.article || '-') + '</td>' +
+            '<td class="col-note">' + esc(pos.note || '-') + '</td>' +
+            '<td class="col-got"></td>' +
+            '<td class="col-status"></td>' +
+            '<td class="col-files"></td>';
+
+        tbody.appendChild(tr);
+        renderDetailProgress(tr);
+    });
+
+    renderOrderProgress();
+    refreshDetailsFileButtons();
+
+    document.getElementById('historyModal').classList.remove('active');
+    document.getElementById('orderDetailsModal').classList.add('active');
+}
+
+function closeOrderDetails() {
+    // Обновляем строку в списке, не перезагружая всю историю
+    if (currentOrderId) {
+        var c = orderProgressCounts(currentOrderPositions);
+        updateHistoryRow(currentOrderId, c.full, c.total, currentOrderViewed, c.part);
+    }
+
+    document.getElementById('orderDetailsModal').classList.remove('active');
+    currentOrderId = null;
+    currentOrderNumber = '';
+    currentOrderPositions = [];
+    currentOrderFiles = [];
+    document.getElementById('historyModal').classList.add('active');
+}
+
+// ============================================================
+// СТАТУС ПОЗИЦИИ: СКОЛЬКО ПРИВЕЗЕНО
+//
+// Привезённое - общее количество, до сотых. Цвет позиции: ничего -
+// красный, часть - жёлтый, всё или больше - зелёный. Статус "выполнено"
+// сервер ставит сам, когда привезено не меньше заказанного.
+// Увеличить количество может любой, уменьшить - только администратор.
+// ============================================================
+
+// Число из поля или ответа сервера: 5, "2.5", "2,5". Не число - NaN
+function parseQty(value) {
+    if (typeof value === 'number') return isFinite(value) ? value : NaN;
+    var s = String(value === null || value === undefined ? '' : value).replace(/\s/g, '').replace(',', '.');
+    if (s === '') return NaN;
+    var n = Number(s);
+    return isFinite(n) ? n : NaN;
+}
+
+function roundQty(n) { return Math.round(n * 100) / 100; }
+function fmtQty(n) { return String(roundQty(n)); }
+
+// Состояние позиции. Сервер до v4.1 не присылает delivered -
+// тогда судим по статусу: выполнено = привезено всё
+function positionProgress(pos) {
+    var qty = parseQty(pos.quantity);
+    var got = parseQty(pos.delivered);
+    var full = pos.status == 1;
+    if (isNaN(got)) got = full ? qty : 0;
+    var state = full ? 'full' : (got > 0 ? 'part' : 'none');
+    var known = !isNaN(qty) && !isNaN(got);
+    return {
+        qty: qty,
+        got: got,        // NaN, если не распознано количество в заявке
+        state: state,    // none / part / full
+        short: (state === 'part' && known) ? roundQty(qty - got) : 0,
+        over: (full && known && got > qty) ? roundQty(got - qty) : 0
+    };
+}
+
+function orderProgressCounts(positions) {
+    var c = { total: positions.length, full: 0, part: 0 };
+    positions.forEach(function(pos) {
+        var state = positionProgress(pos).state;
+        if (state === 'full') c.full++;
+        else if (state === 'part') c.part++;
+    });
+    return c;
+}
+
+// Плашка выполнения заявки: зелёная - привезено всё, жёлтая - хоть
+// что-то, красная - ничего. long - для шапки заявки и печати
+function progressBadge(full, total, part, long) {
+    var tail = part > 0 ? ', частично ' + part : '';
+    if (total > 0 && full >= total) return { cls: 'completed', text: long ? full + ' из ' + total : 'Выполнено' };
+    if (full > 0 || part > 0) return { cls: 'partial', text: (long ? full + ' из ' + total : full + '/' + total) + tail };
+    return { cls: 'pending', text: long ? '0 из ' + total : 'Ожидает' };
+}
+
+function detailPosition(tr) {
+    return currentOrderPositions[Number(tr.getAttribute('data-idx'))];
+}
+
+// Ячейки "Привезено" и "Статус" одной позиции. Ячейку вложений не
+// трогаем - её рисует refreshDetailsFileButtons
+function renderDetailProgress(tr) {
+    var pos = detailPosition(tr);
+    var p = positionProgress(pos);
+    var isAdmin = currentUser.role === 'admin';
+    var qtyKnown = !isNaN(p.qty);
+
+    var hint = '';
+    if (p.short > 0) hint = '<div class="got-hint part">не хватает ' + esc(fmtQty(p.short)) + '</div>';
+    if (p.over > 0) hint = '<div class="got-hint over">больше на ' + esc(fmtQty(p.over)) + '</div>';
+
+    // step="any": стрелки меняют на 1, дробное (до сотых) вписывают руками.
+    // Сохраняем при уходе из поля или по Enter, а не по change: стрелки
+    // дают change на каждое нажатие, и каждое ушло бы на сервер
+    tr.querySelector('.col-got').innerHTML =
+        '<div class="got ' + p.state + '">' +
+            '<input type="number" min="0" step="any" inputmode="decimal" placeholder="0" ' +
+                'value="' + (p.got > 0 ? esc(fmtQty(p.got)) : '') + '" ' +
+                'onblur="onDeliveredChange(this)" onkeydown="if (event.key === \'Enter\') this.blur()"' +
+                (currentOrderCanChange && qtyKnown ? '' : ' disabled') + '>' +
+            '<span>из ' + esc(qtyKnown ? fmtQty(p.qty) : pos.quantity) + '</span>' +
+        '</div>' + hint;
+
+    var cls = 'not-completed', label = '✕', title = 'Ничего не привезено. Нажмите, если привезли всё';
+    if (p.state === 'full') {
+        cls = 'completed'; label = '✓';
+        title = isAdmin ? 'Привезено всё. Нажмите, чтобы снять отметку' : 'Привезено всё';
+    } else if (p.state === 'part') {
+        cls = 'partial';
+        label = qtyKnown ? fmtQty(p.got) + '/' + fmtQty(p.qty) : '◐';
+        if (label.length > 5) label = '◐';   // длинные числа в кружок не влезают
+        title = 'Привезено ' + fmtQty(p.got) + (qtyKnown ? ' из ' + fmtQty(p.qty) : '') + '. Нажмите, если привезли всё';
+    }
+    // Отметить "привезли всё" может любой, снять отметку - только администратор
+    var canClick = currentOrderCanChange && (isAdmin || p.state !== 'full');
+
+    tr.querySelector('.col-status').innerHTML =
+        '<button class="status-btn ' + cls + '" title="' + esc(title) + '" onclick="onStatusClick(this)"' +
+            (canClick ? '' : ' disabled') + '>' + esc(label) + '</button>';
+}
+
+function renderOrderProgress() {
+    var c = orderProgressCounts(currentOrderPositions);
+    var badge = progressBadge(c.full, c.total, c.part, true);
+    document.getElementById('detailProgress').innerHTML =
+        '<span class="status-badge ' + badge.cls + '">' + esc(badge.text) + '</span>';
+}
+
+// Кнопка статуса: "привезли всё", у выполненной (администратор) -
+// снять отметку, то есть "ничего не привезли"
+function onStatusClick(btn) {
+    var tr = btn.closest('tr');
+    var p = positionProgress(detailPosition(tr));
+
+    if (p.state === 'full' && currentUser.role !== 'admin') {
+        showToast('Только администратор может отменить выполнение', 'warning');
+        return;
+    }
+    if (isNaN(p.qty)) {
+        // Количество в заявке не число - отмечаем по-старому, без "Привезено"
+        sendPositionUpdate(tr, { action: 'updateStatus', status: p.state === 'full' ? 0 : 1 });
+        return;
+    }
+    sendPositionUpdate(tr, { action: 'setDelivered', delivered: p.state === 'full' ? 0 : p.qty });
+}
+
+function onDeliveredChange(input) {
+    var tr = input.closest('tr');
+    var p = positionProgress(detailPosition(tr));
+    var raw = input.value.trim();
+    var value = raw === '' ? 0 : parseQty(raw);
+
+    if ((input.validity && input.validity.badInput) || isNaN(value) || value < 0) {
+        showToast('Введите число не меньше нуля', 'error');
+        renderDetailProgress(tr);
+        return;
+    }
+    value = roundQty(value);
+    var current = isNaN(p.got) ? 0 : p.got;
+    // Без изменений не перерисовываем: при уходе из поля кликом по кнопке
+    // статуса перерисовка заменила бы кнопку, и нажатие потерялось бы
+    if (value === current) return;
+    if (value < current && currentUser.role !== 'admin') {
+        showToast('Уменьшить количество может только администратор', 'warning');
+        renderDetailProgress(tr);
+        return;
+    }
+    sendPositionUpdate(tr, { action: 'setDelivered', delivered: value });
+}
+
+// Пишет на сервер и перерисовывает только эту позицию - без
+// перезагрузки всей заявки. При отказе возвращает прежнее значение
+async function sendPositionUpdate(tr, params) {
+    var pos = detailPosition(tr);
+    var orderId = currentOrderId;
+    var request = {
+        password: currentUser.password,
+        orderId: orderId,
+        rowIndex: pos.rowIndex
+    };
+    Object.keys(params).forEach(function(k) { request[k] = params[k]; });
+
+    showLoading();
+    var result = await apiRequest(request);
+    hideLoading();
+
+    if (result.success) {
+        pos.status = result.status;
+        pos.delivered = result.delivered !== undefined ? result.delivered : null;
+        var p = positionProgress(pos);
+        showToast(p.state === 'full' ? 'Позиция выполнена'
+            : p.state === 'part' ? 'Привезено ' + fmtQty(p.got) + ' из ' + fmtQty(p.qty)
+            : 'Отметка снята', 'success');
+    } else {
+        showToast(result.timeout ? 'Сервер долго отвечает. Попробуйте ещё раз.' : (result.error || 'Ошибка обновления статуса'),
+                  result.timeout ? 'warning' : 'error');
+    }
+
+    if (currentOrderId !== orderId) return;   // заявку уже закрыли
+    renderDetailProgress(tr);
+    renderOrderProgress();
+}
+
+// ============================================================
+// УДАЛЕНИЕ ЗАЯВКИ
+// ============================================================
+
+async function deleteCurrentOrder() {
+    if (!currentOrderId) return;
+
+    var filesCount = currentOrderFiles.length;
+    var question = filesCount > 0
+        ? 'Удалить заявку вместе с вложениями (' + filesCount + ')? Файлы уйдут в корзину Google Диска.'
+        : 'Вы уверены, что хотите удалить эту заявку?';
+    if (!confirm(question)) return;
+
+    var deletedId = currentOrderId;
+    showLoading();
+
+    var result = await apiRequest({
+        action: 'deleteOrder',
+        orderId: deletedId,
+        password: currentUser.password
+    });
+
+    hideLoading();
+
+    if (result.success) {
+        showToast('Заявка удалена', 'success');
+        var tr = document.querySelector('#historyBody tr[data-order-id="' + deletedId + '"]');
+        if (tr) tr.remove();
+        document.getElementById('orderDetailsModal').classList.remove('active');
+        currentOrderId = null;
+        currentOrderFiles = [];
+        currentOrderPositions = [];
+        document.getElementById('historyModal').classList.add('active');
+    } else {
+        showToast(result.timeout ? 'Сервер долго отвечает. Проверьте историю заявок.' : (result.error || 'Ошибка удаления'),
+                  result.timeout ? 'warning' : 'error');
+    }
+}
+
+// ============================================================
+// ПЕЧАТЬ
+// ============================================================
+
+// ------------------------------------------------------------
+// Журнал заявок за период
+//
+// Отбора по периоду на сервере нет, поэтому список собираем из той же
+// истории (getHistory) порциями, а позиции каждой заявки берём через
+// getOrderDetails - по несколько заявок одновременно.
+// ------------------------------------------------------------
+
+// Период по умолчанию, подставленный в последний раз. Пока человек его
+// не менял, при каждом открытии пересчитываем от сегодняшнего дня -
+// иначе во вкладке, открытой со вчера, журнал потерял бы сегодняшние заявки
+var journalAutoDates = null;
+
+function openJournalModal() {
+    var fromInput = document.getElementById('journalFrom');
+    var toInput = document.getElementById('journalTo');
+    var untouched = journalAutoDates &&
+        fromInput.value === journalAutoDates.from && toInput.value === journalAutoDates.to;
+    if (!fromInput.value || !toInput.value || untouched) {
+        var today = new Date();
+        var start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - JOURNAL_DAYS);
+        setDateValue('journalFrom', inputDateValue(start));
+        setDateValue('journalTo', inputDateValue(today));
+        journalAutoDates = { from: fromInput.value, to: toInput.value };
+    }
+    document.getElementById('journalModal').classList.add('active');
+}
+
+function closeJournalModal() {
+    document.getElementById('journalModal').classList.remove('active');
+}
+
+// Date -> 'гггг-мм-дд' для <input type="date">
+function inputDateValue(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// 'гггг-мм-дд' -> Date (начало дня по местному времени)
+function parseInputDate(value) {
+    var p = String(value || '').split('-');
+    if (p.length !== 3) return null;
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function formatDay(d) {
+    return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+}
+
+// Дата заявки приходит строкой 'дд.мм.гггг чч:мм'
+function parseOrderDate(value) {
+    var s = String(value || '');
+    var m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\D+(\d{1,2}):(\d{2}))?/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0));
+    var t = Date.parse(s);
+    return isNaN(t) ? null : new Date(t);
+}
+
+// Повторяем запрос один раз, если не было связи
+async function apiRequestRetry(params) {
+    var res = await apiRequest(params);
+    if (!res.success && res.transport) res = await apiRequest(params);
+    return res;
+}
+
+// Выполняет fn для каждого элемента, не больше limit одновременно
+async function runLimited(items, limit, fn) {
+    var results = new Array(items.length);
+    var next = 0;
+    async function worker() {
+        while (next < items.length) {
+            var i = next++;
+            results[i] = await fn(items[i], i);
+        }
+    }
+    var workers = [];
+    for (var w = 0; w < Math.min(limit, items.length); w++) workers.push(worker());
+    await Promise.all(workers);
+    return results;
+}
+
+// Заявки за период. Если сервер отдаёт историю от новых к старым,
+// останавливаемся, когда ЦЕЛАЯ порция заметно старше периода: одна
+// заявка, ушедшая из очереди с опозданием или с неверными часами
+// компьютера, остановить просмотр не может. Запас JOURNAL_SORT_MARGIN -
+// для таких заявок. Если порядок дат нарушен, просматриваем историю до конца.
+async function fetchJournalOrders(dept, from, toEnd, onProgress, cancelled) {
+    var found = [];
+    var seen = {};                 // порции могут сдвинуться, если заявку сохранили во время просмотра
+    var unknownDate = 0;
+    var offset = 0;
+    var lastTime = Infinity;
+    var newestFirst = true;
+    // Период в один день сервер умеет отобрать сам
+    var singleDay = formatDay(from) === formatDay(toEnd) ? formatDay(from) : '';
+
+    while (true) {
+        if (cancelled()) return null;
+        var res = await apiRequestRetry({
+            action: 'getHistory',
+            password: currentUser.password,
+            filterDept: dept,
+            filterDate: singleDay,
+            offset: offset,
+            limit: JOURNAL_PAGE
+        });
+        if (!res.success) {
+            throw new Error(res.timeout ? 'Сервер долго отвечает. Попробуйте ещё раз.' : (res.error || 'Не удалось загрузить список заявок'));
+        }
+
+        var orders = res.orders || [];
+        var pageNewest = -Infinity;
+        orders.forEach(function(o) {
+            if (seen[o.id]) return;
+            seen[o.id] = true;
+            var d = parseOrderDate(o.date);
+            if (!d) { unknownDate++; return; }
+            if (d.getTime() > lastTime) newestFirst = false;
+            lastTime = d.getTime();
+            if (lastTime > pageNewest) pageNewest = lastTime;
+            if (d >= from && d <= toEnd) found.push({ order: o, time: d.getTime() });
+        });
+
+        offset += orders.length;
+        onProgress(offset, res.total || offset);
+
+        if (!res.hasMore || orders.length === 0) break;
+        if (newestFirst && pageNewest > -Infinity && pageNewest < from.getTime() - JOURNAL_SORT_MARGIN) break;
+    }
+    return { items: found, unknownDate: unknownDate };
+}
+
+async function printJournal() {
+    if (document.querySelector('#journalModal .date-text.invalid')) {
+        showToast('Дата указана не полностью — нужно дд.мм.гггг', 'error');
+        return;
+    }
+    var from = parseInputDate(document.getElementById('journalFrom').value);
+    var to = parseInputDate(document.getElementById('journalTo').value);
+    if (!from || !to) { showToast('Укажите период', 'error'); return; }
+    if (from > to) { showToast('Дата «с» позже даты «по»', 'error'); return; }
+
+    var toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+    var deptSelect = document.getElementById('journalDept');
+    var dept = deptSelect.value;
+    var modeInput = document.querySelector('input[name="journalMode"]:checked');
+    var opts = {
+        mode: modeInput ? modeInput.value : 'undone',
+        from: from,
+        to: to,
+        deptLabel: dept ? dept : 'все'
+    };
+
+    // Окно открываем сразу, пока действует нажатие кнопки - иначе
+    // браузер заблокирует его как всплывающее
+    var win = window.open('', '_blank');
+    if (!win) {
+        showToast('Браузер заблокировал окно печати. Разрешите всплывающие окна.', 'warning');
+        return;
+    }
+    win.document.write(journalPageHtml('Журнал заявок',
+        '<div class="status" id="journalStatus">Загружаю список заявок…</div>'));
+    win.document.close();
+    closeJournalModal();
+
+    function cancelled() { return win.closed; }
+    function status(text) {
+        try {
+            var el = win.document.getElementById('journalStatus');
+            if (el) el.textContent = text;
+        } catch (e) { }
+    }
+
+    try {
+        var list = await fetchJournalOrders(dept, from, toEnd, function(seen, total) {
+            status('Загружаю список заявок: просмотрено ' + seen + ' из ' + total + '…');
+        }, cancelled);
+        if (!list || cancelled()) return;
+
+        // Для "невыполненного" полностью выполненные заявки даже не открываем
+        var todo = list.items.filter(function(it) {
+            if (opts.mode !== 'undone') return true;
+            var total = Number(it.order.totalPositions);
+            var done = Number(it.order.completedPositions);
+            return !(total > 0 && done >= total);
+        });
+        todo.sort(function(a, b) {
+            return (a.time - b.time) || String(a.order.number).localeCompare(String(b.order.number));
+        });
+
+        var loaded = 0;
+        status('Загружаю позиции заявок: 0 из ' + todo.length + '…');
+        var entries = await runLimited(todo, JOURNAL_PARALLEL, async function(it) {
+            if (cancelled()) return null;
+            var res = await apiRequestRetry({
+                action: 'getOrderDetails',
+                orderId: it.order.id,
+                password: currentUser.password
+            });
+            loaded++;
+            status('Загружаю позиции заявок: ' + loaded + ' из ' + todo.length + '…');
+            if (!res.success) {
+                return { order: it.order, positions: null, error: res.timeout ? 'сервер долго отвечает' : (res.error || 'нет ответа сервера') };
+            }
+            return { order: it.order, positions: res.positions || [] };
+        });
+        if (cancelled()) return;
+
+        var journal = buildJournalHtml(opts, entries.filter(Boolean), list.unknownDate);
+        win.document.open();
+        win.document.write(journal.html);
+        win.document.close();
+        if (journal.rows > 0) {
+            win.focus();
+            win.print();
+        }
+    } catch (e) {
+        if (cancelled()) return;
+        status('Журнал не сформирован: ' + (e && e.message ? e.message : e) + '. Закройте окно и попробуйте ещё раз.');
+    }
+}
+
+function journalOrderState(done, total, part) {
+    if (total > 0 && done >= total) return 'Выполнена';
+    if (done > 0 || part > 0) return 'Частично: выполнено ' + done + ' из ' + total + (part > 0 ? ', частично ' + part : '');
+    return 'Не выполнена';
+}
+
+// Отметка в колонке "Отметка" полного журнала
+function journalMark(p) {
+    if (p.state === 'part') return '◐ ' + fmtQty(p.got) + (isNaN(p.qty) ? '' : ' из ' + fmtQty(p.qty));
+    if (p.state === 'none') return '✗ не выполнено';
+    if (p.over > 0) return '✓ ' + fmtQty(p.got) + ' из ' + fmtQty(p.qty);
+    return '✓ выполнено';
+}
+
+function buildJournalHtml(opts, entries, unknownDate) {
+    var undoneOnly = opts.mode === 'undone';
+    var cols = undoneOnly ? 6 : 7;
+    var body = '';
+    var ordersCount = 0, rowsCount = 0, undoneCount = 0, partCount = 0, positionsCount = 0, failed = 0;
+    var cell = '<td class="c">';
+
+    // У каждой заявки своя таблица: её заголовок вместе с названиями колонок
+    // стоит в <thead>, и браузер повторяет его на каждом листе, если
+    // заявка не уместилась на одном. Ширины колонок общие - через <colgroup>.
+    var colgroup =
+        '<colgroup>' +
+            '<col style="width:36px;"><col>' +
+            '<col style="width:55px;"><col style="width:55px;">' +
+            '<col style="width:90px;"><col style="width:140px;">' +
+            (undoneOnly ? '' : '<col style="width:112px;">') +
+        '</colgroup>';
+    var columnsRow =
+        '<tr class="cols">' +
+            '<th>№</th><th>Наименование материала</th><th>Ед.изм.</th><th>Кол-во</th>' +
+            '<th>Артикул</th><th>Примечание</th>' +
+            (undoneOnly ? '' : '<th>Отметка</th>') +
+        '</tr>';
+
+    entries.forEach(function(e) {
+        var o = e.order;
+        var positions = e.positions || [];
+        var counts = orderProgressCounts(positions);
+        var rows = undoneOnly ? positions.filter(function(p) { return positionProgress(p).state !== 'full'; }) : positions;
+        if (!e.error && rows.length === 0) return;
+
+        var state = e.error
+            ? journalOrderState(Number(o.completedPositions) || 0, Number(o.totalPositions) || 0, Number(o.partialPositions) || 0)
+            : journalOrderState(counts.full, counts.total, counts.part);
+
+        ordersCount++;
+        body +=
+            '<table class="order">' + colgroup +
+                '<thead>' +
+                    '<tr class="order-head"><td colspan="' + cols + '">' +
+                        '<div class="oh-state">' + esc(state) + '</div>' +
+                        '<div class="oh-main">Заявка № ' + esc(o.number) + ' от ' + esc(o.date) + ' — ' + esc(o.department) + '</div>' +
+                        '<div class="oh-meta">Объект: ' + esc(o.object || '-') + ' • Категория: ' + esc(o.category || '-') +
+                            ' • Создал: ' + esc(o.createdBy || '-') + '</div>' +
+                    '</td></tr>' +
+                    columnsRow +
+                '</thead>' +
+                '<tbody>';
+
+        if (e.error) {
+            failed++;
+            body += '<tr><td colspan="' + cols + '" class="err">Позиции не загрузились (' + esc(e.error) +
+                '). Откройте заявку в истории или сформируйте журнал ещё раз.</td></tr>';
+        }
+
+        rows.forEach(function(p) {
+            var pr = positionProgress(p);
+            var isDone = pr.state === 'full';
+            rowsCount++;
+            positionsCount++;
+            if (!isDone) undoneCount++;
+            if (pr.state === 'part') partCount++;
+            // В "невыполненном" колонки отметки нет - что привезено, пишем под названием
+            var partNote = (undoneOnly && pr.state === 'part')
+                ? '<div class="part-note">Привезено ' + esc(fmtQty(pr.got)) +
+                      (isNaN(pr.qty) ? '' : ' из ' + esc(fmtQty(pr.qty)) + ', не хватает ' + esc(fmtQty(pr.short))) + '</div>'
+                : '';
+            body +=
+                '<tr class="' + (isDone ? 'done' : 'undone') + '">' +
+                    cell + esc(p.position) + '</td>' +
+                    '<td class="name">' + esc(p.name) + partNote + '</td>' +
+                    cell + esc(p.unit) + '</td>' +
+                    cell + esc(p.quantity) + '</td>' +
+                    cell + esc(p.article || '-') + '</td>' +
+                    '<td>' + esc(p.note || '-') + '</td>' +
+                    (undoneOnly ? '' : '<td class="c mark">' + esc(journalMark(pr)) + '</td>') +
+                '</tr>';
+        });
+        body += '</tbody></table>';
+    });
+
+    var title = undoneOnly ? 'ЖУРНАЛ НЕВЫПОЛНЕННЫХ ПОЗИЦИЙ' : 'ЖУРНАЛ ЗАЯВОК';
+    var sub = 'Период: ' + formatDay(opts.from) + ' — ' + formatDay(opts.to) +
+        ' • Подразделение: ' + opts.deptLabel + ' • Сформирован: ' + formatDate(new Date());
+
+    var partTail = partCount > 0 ? ' (привезено частично: ' + partCount + ')' : '';
+    var summary = undoneOnly
+        ? 'Заявок с невыполненными позициями: ' + ordersCount + ' • Не выполнено позиций: ' + undoneCount + partTail
+        : 'Заявок: ' + ordersCount + ' • Позиций: ' + positionsCount + ', из них не выполнено: ' + undoneCount + partTail;
+
+    var notes = '';
+    if (failed > 0) notes += '<p class="warn">Не загрузились позиции заявок: ' + failed + ' — они отмечены в журнале.</p>';
+    if (unknownDate > 0) notes += '<p class="warn">Заявок с нераспознанной датой: ' + unknownDate + ' — в журнал не вошли.</p>';
+
+    var content;
+    if (ordersCount === 0) {
+        content = '<div class="status">' + (undoneOnly
+            ? 'За этот период невыполненных позиций нет.'
+            : 'За этот период заявок нет.') + '</div>';
+    } else {
+        content = body;
+    }
+
+    var html = journalPageHtml(title,
+        '<div class="toolbar no-print"><button onclick="window.print()">🖨 Печать</button></div>' +
+        '<h1>' + esc(title) + '</h1>' +
+        '<p class="sub">' + esc(sub) + '</p>' +
+        (ordersCount > 0 ? '<p class="summary">' + esc(summary) + '</p>' : '') +
+        notes +
+        content);
+
+    return { html: html, rows: rowsCount };
+}
+
+function journalPageHtml(title, bodyHtml) {
+    return '<!DOCTYPE html>' +
+        '<html>' +
+        '<head>' +
+            '<meta charset="UTF-8">' +
+            '<title>' + esc(title) + '</title>' +
+            '<style>' +
+                'body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; color: #000; }' +
+                'h1 { text-align: center; font-size: 17px; margin: 0 0 6px; }' +
+                '.sub { text-align: center; font-size: 12px; color: #333; margin: 0 0 4px; }' +
+                '.summary { text-align: center; font-size: 12px; font-weight: bold; margin: 0 0 14px; }' +
+                '.warn { font-size: 12px; color: #a00; margin: 0 0 8px; }' +
+                '.status { padding: 40px 20px; text-align: center; font-size: 15px; color: #333; }' +
+                '.toolbar { text-align: right; margin-bottom: 10px; }' +
+                '.toolbar button { padding: 6px 14px; font-size: 14px; cursor: pointer; }' +
+                'table.order { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 8px; page-break-inside: avoid; break-inside: avoid; }' +
+                'th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; overflow-wrap: break-word; }' +
+                'tr.cols th { background: #f0f0f0; font-size: 10px; padding: 2px 6px; font-weight: normal; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+                'td.c { text-align: center; }' +
+                'td.mark { white-space: nowrap; }' +
+                'tr.order-head td { background: #e6e6e6; padding: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+                '.oh-state { float: right; font-weight: bold; margin-left: 10px; }' +
+                '.oh-main { font-weight: bold; font-size: 12px; }' +
+                '.oh-meta { font-size: 11px; margin-top: 2px; }' +
+                'tr.undone td.name { font-weight: bold; }' +
+                '.part-note { font-weight: normal; font-size: 11px; margin-top: 2px; }' +
+                'tr.done td { color: #555; }' +
+                'td.err { color: #a00; font-style: italic; }' +
+                '@media print { .no-print { display: none !important; } body { padding: 0; } }' +
+            '</style>' +
+        '</head>' +
+        '<body>' + bodyHtml + '</body>' +
+        '</html>';
+}
+
+function printOrderDetails(withPhotos) {
+    var positions = currentOrderPositions.map(function(pos) {
+        return {
+            num: pos.position,   // по нему фото находят свою позицию
+            name: pos.name,
+            unit: pos.unit,
+            quantity: pos.quantity,
+            article: pos.article,
+            note: pos.note,
+            progress: positionProgress(pos)
+        };
+    });
+
+    generatePrintContent({
+        number: document.getElementById('detailNumber').textContent,
+        date: document.getElementById('detailDate').textContent,
+        department: document.getElementById('detailDepartment').textContent,
+        object: document.getElementById('detailObject').textContent,
+        category: document.getElementById('detailCategory').textContent,
+        createdBy: document.getElementById('detailCreatedBy').textContent,
+        positions: positions,
+        progress: orderProgressCounts(currentOrderPositions),
+        files: currentOrderFiles,
+        withPhotos: !!withPhotos
+    });
+}
+
+// ------------------------------------------------------------
+// Фотоматериалы для печати
+// ------------------------------------------------------------
+
+// ID файла на Google Диске - из поля fileId или из ссылок на файл
+function driveFileId(f) {
+    if (f.fileId) return String(f.fileId);
+    var links = [f.url, f.thumbUrl];
+    for (var i = 0; i < links.length; i++) {
+        var s = String(links[i] || '');
+        var m = s.match(/\/d\/([\w-]{20,})/) || s.match(/[?&]id=([\w-]{20,})/);
+        if (m) return m[1];
+    }
+    return '';
+}
+
+// Миниатюра с сервера мелкая для печати - просим у Диска то же фото
+// покрупнее. Не вышло - печатаем саму миниатюру (data-fallback).
+function drivePrintSrc(f) {
+    var thumb = String(f.thumbUrl || '');
+    if (/[?&]sz=/.test(thumb)) return thumb.replace(/([?&]sz=)[^&#]*/, '$1w' + PRINT_PHOTO_SIZE);
+    if (/googleusercontent\.com\//.test(thumb) && /=[swh]\d+[-\w]*$/.test(thumb)) {
+        return thumb.replace(/=[swh]\d+[-\w]*$/, '=s' + PRINT_PHOTO_SIZE);
+    }
+    var id = driveFileId(f);
+    if (id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w' + PRINT_PHOTO_SIZE;
+    return thumb;
+}
+
+// Фото раскладываем по позициям в порядке таблицы и нумеруем сквозь всю
+// заявку. Фото, чья позиция не нашлась, идут последней группой.
+function groupPrintPhotos(positions, files) {
+    var photos = (files || []).filter(function(f) { return !isPdfFile(f); });
+    var groups = [];
+    var used = [];
+    var no = 0;
+
+    function numbered(list) {
+        return list.map(function(f) { return { file: f, no: ++no }; });
+    }
+
+    positions.forEach(function(pos, index) {
+        var num = (pos.num !== null && pos.num !== undefined) ? Number(pos.num) : index + 1;
+        var items = photos.filter(function(f) { return Number(f.positionNum) === num; });
+        if (items.length === 0) return;
+        used = used.concat(items);
+        groups.push({ index: index, title: 'Позиция ' + (index + 1) + '. ' + pos.name, items: numbered(items) });
+    });
+
+    var rest = photos.filter(function(f) { return used.indexOf(f) === -1; });
+    if (rest.length > 0) groups.push({ index: -1, title: 'Прочие фото', items: numbered(rest) });
+
+    return { groups: groups, count: no };
+}
+
+function buildPrintPhotosHtml(data, groups) {
+    var html =
+        '<div class="photos">' +
+            '<h1>ФОТОМАТЕРИАЛЫ К ЗАЯВКЕ № ' + esc(data.number) + '</h1>' +
+            '<p class="photos-sub">' + esc(data.date) + ' • ' + esc(data.department) + ' • ' + esc(data.object || '-') + '</p>';
+
+    groups.forEach(function(g) {
+        for (var i = 0; i < g.items.length; i += 2) {
+            var row = '<div class="photo-row">';
+            g.items.slice(i, i + 2).forEach(function(it) {
+                var f = it.file;
+                var src = drivePrintSrc(f);
+                var fallback = (f.thumbUrl && f.thumbUrl !== src) ? f.thumbUrl : '';
+                var meta = [f.origName || f.name, f.by, f.at].filter(Boolean).join(' • ');
+                // Номер позиции в подписи: на следующем листе заголовка группы уже не видно
+                row +=
+                    '<div class="photo">' +
+                        '<div class="photo-frame"><img alt="" data-src="' + esc(src) + '"' +
+                            (fallback ? ' data-fallback="' + esc(fallback) + '"' : '') + '></div>' +
+                        '<div class="photo-cap"><strong>Фото ' + it.no + '</strong>' +
+                            (g.index >= 0 ? ' — позиция ' + (g.index + 1) : '') +
+                            (meta ? '<br><span class="photo-meta">' + esc(meta) + '</span>' : '') +
+                        '</div>' +
+                    '</div>';
+            });
+            row += '</div>';
+            // Заголовок позиции держим вместе с первым рядом фото,
+            // чтобы он не остался один внизу листа
+            html += i === 0
+                ? '<div class="photo-keep"><h2>' + esc(g.title) + '</h2>' + row + '</div>'
+                : row;
+        }
+    });
+
+    return html + '</div>';
+}
+
+// Фото в окне печати грузим сами: так знаем, когда все готовы, и можем
+// подменить не загрузившееся. Печать не ждёт дольше PRINT_PHOTOS_TIMEOUT.
+function loadPrintPhotos(win, timeoutMs) {
+    return new Promise(function(resolve) {
+        var imgs = [];
+        var counter = null;
+        try {
+            imgs = Array.prototype.slice.call(win.document.querySelectorAll('img[data-src]'));
+            counter = win.document.getElementById('printPhotosCount');
+        } catch (e) { }
+
+        var total = imgs.length;
+        var left = total;
+        var failed = 0;
+        var finished = false;
+        var timer = null;
+
+        function finish() {
+            if (finished) return;
+            finished = true;
+            if (timer) clearTimeout(timer);
+            resolve({ total: total, failed: failed, pending: left });
+        }
+
+        function settle() {
+            left--;
+            if (counter) counter.textContent = (total - left) + ' из ' + total;
+            if (left <= 0) finish();
+        }
+
+        if (total === 0) { finish(); return; }
+        timer = setTimeout(finish, timeoutMs);
+
+        imgs.forEach(function(img) {
+            img.onload = settle;
+            img.onerror = function() {
+                var fallback = img.getAttribute('data-fallback');
+                if (fallback) {
+                    img.removeAttribute('data-fallback');
+                    img.src = fallback;
+                    return;
+                }
+                img.onerror = null;
+                failed++;
+                if (img.parentNode) {
+                    img.parentNode.innerHTML = '<div class="photo-missing">Фото не загрузилось.<br>Откройте его в заявке по скрепке.</div>';
+                }
+                settle();
+            };
+            img.src = img.getAttribute('data-src');
+        });
+    });
+}
+
+// "Привезено" в печатной заявке. Ничего не привезли - клетка пустая,
+// чтобы можно было вписать от руки
+function printGotText(p) {
+    if (p.state === 'none') return '';
+    if (p.state === 'part') return fmtQty(p.got) + (p.short > 0 ? ' (не хватает ' + fmtQty(p.short) + ')' : '');
+    if (isNaN(p.got)) return '✓';
+    return '✓ ' + fmtQty(p.got) + (p.over > 0 ? ' (больше на ' + fmtQty(p.over) + ')' : '');
+}
+
+function generatePrintContent(data) {
+    var photoInfo = groupPrintPhotos(data.positions, data.withPhotos ? data.files : []);
+    var withPhotos = photoInfo.count > 0;
+
+    // Номера фото по строкам таблицы - для ссылок "Фото" в заявке
+    var photoRefs = {};
+    photoInfo.groups.forEach(function(g) {
+        photoRefs[g.index] = g.items.map(function(it) { return it.no; }).join(', ');
+    });
+
+    var positionsHTML = '';
+
+    data.positions.forEach(function(pos, index) {
+        positionsHTML +=
+            '<tr>' +
+                '<td style="border:1px solid #000;padding:8px;text-align:center;">' + (index + 1) + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;">' + esc(pos.name) + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;text-align:center;">' + esc(pos.unit) + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;text-align:center;">' + esc(pos.quantity) + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;text-align:center;">' + esc(pos.article || '-') + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;">' + esc(pos.note || '-') + '</td>' +
+                '<td style="border:1px solid #000;padding:8px;text-align:center;">' + esc(printGotText(pos.progress)) + '</td>' +
+                (withPhotos
+                    ? '<td style="border:1px solid #000;padding:8px;text-align:center;">' + esc(photoRefs[index] || '-') + '</td>'
+                    : '') +
+            '</tr>';
+    });
+
+    var filesHTML = '';
+    if (withPhotos) {
+        filesHTML = '<div class="files-block"><p><strong>Приложение:</strong> фотоматериалы, ' +
+            photoInfo.count + ' фото (на отдельных листах).</p>';
+        var pdfs = data.files.filter(isPdfFile);
+        if (pdfs.length > 0) {
+            filesHTML += '<p><strong>Документы PDF</strong> (печатаются отдельно):</p><ul>';
+            pdfs.forEach(function(f) {
+                filesHTML += '<li>Позиция ' + esc(f.positionNum) + ': ' + esc(f.origName || f.name) + '</li>';
+            });
+            filesHTML += '</ul>';
+        }
+        filesHTML += '</div>';
+    } else if (data.files && data.files.length > 0) {
+        filesHTML = '<div class="files-block"><p><strong>Вложения:</strong></p><ul>';
+        data.files.forEach(function(f) {
+            filesHTML += '<li>Позиция ' + esc(f.positionNum) + ': ' + esc(f.origName || f.name) + '</li>';
+        });
+        filesHTML += '</ul></div>';
+    }
+
+    var statusHTML = withPhotos
+        ? '<div class="print-status no-print">' +
+              '<span id="printStatusText">Загружаю фотографии: <span id="printPhotosCount">0 из ' + photoInfo.count + '</span>…</span>' +
+              '<button onclick="window.print()">🖨 Печать</button>' +
+          '</div>'
+        : '';
+
+    var printWindow = window.open('', '_blank');
+    if (!printWindow) {
+        showToast('Браузер заблокировал окно печати. Разрешите всплывающие окна.', 'warning');
+        return;
+    }
+
+    printWindow.document.write(
+        '<!DOCTYPE html>' +
+        '<html>' +
+        '<head>' +
+            '<meta charset="UTF-8">' +
+            '<title>Заявка ' + esc(data.number) + '</title>' +
+            '<style>' +
+                'body { font-family: Arial, sans-serif; padding: 20px; }' +
+                'h1 { text-align: center; font-size: 18px; margin-bottom: 20px; }' +
+                '.header-info { margin-bottom: 20px; }' +
+                '.header-info p { margin: 5px 0; }' +
+                'table { width: 100%; border-collapse: collapse; margin-top: 20px; }' +
+                'th { border: 1px solid #000; padding: 8px; background: #f0f0f0; font-size: 12px; }' +
+                '.files-block { margin-top: 20px; font-size: 13px; }' +
+                '.files-block ul { margin-left: 20px; }' +
+                '.footer { margin-top: 40px; }' +
+                '.signature-block { margin-top: 30px; }' +
+                '.print-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 20px; border: 1px solid #e0c060; border-radius: 6px; background: #fff8dc; font-size: 14px; }' +
+                '.print-status button { padding: 6px 14px; font-size: 14px; cursor: pointer; }' +
+                '.photos { page-break-before: always; break-before: page; }' +
+                '.photos h1 { margin-bottom: 6px; }' +
+                '.photos-sub { text-align: center; font-size: 12px; color: #444; margin: 0 0 16px; }' +
+                '.photos h2 { font-size: 14px; margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #000; }' +
+                '.photo-keep, .photo-row { page-break-inside: avoid; break-inside: avoid; }' +
+                '.photo-row { display: flex; justify-content: space-between; margin-bottom: 12px; }' +
+                '.photo { width: 49%; }' +
+                '.photo-frame { height: 88mm; border: 1px solid #999; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fff; }' +
+                '.photo-frame img { max-width: 100%; max-height: 100%; display: block; }' +
+                '.photo-cap { font-size: 11px; margin-top: 4px; word-break: break-word; }' +
+                '.photo-meta { color: #555; }' +
+                '.photo-missing { font-size: 12px; color: #555; text-align: center; padding: 10px; }' +
+                '@media print { .no-print { display: none !important; } }' +
+            '</style>' +
+        '</head>' +
+        '<body>' +
+            statusHTML +
+            '<h1>ЗАЯВКА НА МАТЕРИАЛЫ № ' + esc(data.number) + '</h1>' +
+
+            '<div class="header-info">' +
+                '<p><strong>Дата:</strong> ' + esc(data.date) + '</p>' +
+                '<p><strong>Подразделение:</strong> ' + esc(data.department) + '</p>' +
+                '<p><strong>Объект:</strong> ' + esc(data.object || '-') + '</p>' +
+                '<p><strong>Категория:</strong> ' + esc(data.category) + '</p>' +
+                '<p><strong>Создал заявку:</strong> ' + esc(data.createdBy || '-') + '</p>' +
+                '<p><strong>Выполнение:</strong> ' +
+                    esc(progressBadge(data.progress.full, data.progress.total, data.progress.part, true).text) + '</p>' +
+            '</div>' +
+
+            '<table>' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th style="width:40px;">№</th>' +
+                        '<th>Наименование материала</th>' +
+                        '<th style="width:55px;">Ед.изм.</th>' +
+                        '<th style="width:55px;">Кол-во</th>' +
+                        '<th style="width:90px;">Артикул</th>' +
+                        '<th style="width:120px;">Примечание</th>' +
+                        '<th style="width:85px;">Привезено</th>' +
+                        (withPhotos ? '<th style="width:50px;">Фото</th>' : '') +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' + positionsHTML + '</tbody>' +
+            '</table>' +
+
+            filesHTML +
+
+            '<div class="footer">' +
+                '<div class="signature-block">' +
+                    '<p><strong>Создал заявку:</strong> _______________ / ' + esc(data.createdBy || '_______________') + ' /</p>' +
+                '</div>' +
+                '<div class="signature-block">' +
+                    '<p><strong>Принял в работу:</strong> _______________ / _______________ /</p>' +
+                    '<p><strong>Дата:</strong> _______________</p>' +
+                '</div>' +
+            '</div>' +
+
+            (withPhotos ? buildPrintPhotosHtml(data, photoInfo.groups) : '') +
+        '</body>' +
+        '</html>'
+    );
+    printWindow.document.close();
+
+    if (!withPhotos) {
+        printWindow.print();
+        return;
+    }
+
+    // Печатаем, когда фото загрузились: иначе на листах будут пустые рамки
+    loadPrintPhotos(printWindow, PRINT_PHOTOS_TIMEOUT).then(function(res) {
+        try {
+            if (printWindow.closed) return;
+            var missing = res.failed + res.pending;
+            var text = printWindow.document.getElementById('printStatusText');
+            if (text) {
+                text.textContent = missing === 0
+                    ? 'Фотографии загружены.'
+                    : 'Не загрузилось фото: ' + missing + ' из ' + res.total + '. Можно напечатать как есть.';
+            }
+            printWindow.focus();
+            printWindow.print();
+        } catch (e) { }
+    });
+}
+
+// ============================================================
+// ИНИЦИАЛИЗАЦИЯ
+//
+// Слушатели вешаются ОДИН РАЗ на контейнеры, которые не
+// пересобираются. Если вешать их на форму при каждом открытии,
+// обработчики копятся.
+// ============================================================
+
+document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') handleLogin();
+});
+
+document.querySelectorAll('.date-field').forEach(initDateField);
+
+document.getElementById('orderForm').addEventListener('input', scheduleDraftSave);
+document.getElementById('orderForm').addEventListener('change', scheduleDraftSave);
+
+// Связь восстановилась - дожимаем очередь
+window.addEventListener('online', function() {
+    showToast('Связь восстановлена, отправляю очередь', 'success');
+    var arr = queueLoad();
+    var changed = false;
+    arr.forEach(function(it) {
+        if (it.status === 'error' && !it.rejected) { it.status = 'pending'; it.attempts = 0; changed = true; }
+    });
+    if (changed) queueSave(arr);
+    renderQueue();
+    queueProcess();
+});
+
+window.addEventListener('offline', function() {
+    showToast('Связь потеряна. Записи сохраняются в очереди.', 'warning');
+    renderQueue();
+});
+
+// Вкладка вернулась в фокус - проверяем очередь
+window.addEventListener('focus', function() { queueProcess(); });
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) queueProcess();
+});
+
+// Предупреждаем, если закрывают вкладку с неотправленными записями
+window.addEventListener('beforeunload', function(e) {
+    if (queueUnsentCount() > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+window.onload = function() {
+    queueRecoverStuck();
+    renderQueue();
+    cleanupOrphanBlobs();
+    checkSession();
+};
+</script>
+</body>
+</html>
+<!-- ============================================================
+     КОНЕЦ ФАЙЛА index.html (версия 4.4)
+     ============================================================ -->
